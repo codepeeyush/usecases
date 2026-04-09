@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import SaasExample from '@/examples/saas'
 import EcommerceExample from '@/examples/ecommerce'
@@ -15,8 +15,19 @@ const examples = [
 ]
 
 export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarVisible, setSidebarVisible] = useState(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key === 'k') {
+        e.preventDefault()
+        setSidebarVisible(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
   const location = useLocation()
 
   // Redirect root to first example
@@ -25,25 +36,31 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex overflow-hidden">
-      {/* Sidebar */}
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Left hover trigger zone */}
+      <div
+        className="absolute top-0 left-0 h-full w-2 z-20"
+        onMouseEnter={() => setSidebarVisible(true)}
+      />
+
+      {/* Sidebar - revealed on left hover */}
       <aside
-        className={`${
-          sidebarOpen ? 'w-64' : 'w-0'
-        } transition-all duration-300 border-r border-border flex flex-col shrink-0 overflow-hidden`}
+        className={`absolute top-0 left-0 h-full z-10 flex flex-col shrink-0 overflow-hidden border-r border-border bg-background transition-all duration-200 ${
+          sidebarVisible ? 'w-64' : 'w-0'
+        }`}
+        onMouseLeave={() => setSidebarVisible(false)}
       >
         <div className="w-64 flex flex-col h-full">
-          <div className="p-6 border-b border-border flex items-center justify-between">
-            <div>
-              <h1 className="font-semibold text-sm text-foreground">AI Chatbot Use Cases</h1>
-              <p className="text-xs text-muted-foreground mt-1">Industry demos</p>
-            </div>
+          <div className="p-6 border-b border-border">
+            <h1 className="font-semibold text-sm text-foreground">AI Chatbot Use Cases</h1>
+            <p className="text-xs text-muted-foreground mt-1">Industry demos</p>
           </div>
           <nav className="flex-1 p-3 space-y-1">
             {examples.map((ex) => (
               <NavLink
                 key={ex.id}
                 to={ex.path}
+                onClick={() => setSidebarVisible(false)}
                 className={({ isActive }) =>
                   `flex flex-col w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
                     isActive
@@ -66,42 +83,13 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 flex flex-col overflow-auto">
-        {/* Toggle button */}
-        <div className="h-10 flex items-center px-3 border-b border-border shrink-0">
-          <button
-            onClick={() => setSidebarOpen((v) => !v)}
-            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Toggle sidebar"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              {sidebarOpen ? (
-                <>
-                  <rect x="1" y="2" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <rect x="1" y="12.5" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <path d="M5 5L2.5 8L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </>
-              ) : (
-                <>
-                  <rect x="1" y="2" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <rect x="1" y="12.5" width="14" height="1.5" rx="0.75" fill="currentColor" />
-                  <path d="M3 5L5.5 8L3 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </>
-              )}
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex-1">
-          <Routes>
-            {examples.map((ex) => (
-              <Route key={ex.id} path={ex.path} element={<ex.component />} />
-            ))}
-          </Routes>
-        </div>
+      {/* Main - full screen */}
+      <main className="flex-1 h-full overflow-auto">
+        <Routes>
+          {examples.map((ex) => (
+            <Route key={ex.id} path={ex.path} element={<ex.component />} />
+          ))}
+        </Routes>
       </main>
     </div>
   )
