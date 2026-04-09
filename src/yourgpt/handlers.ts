@@ -20,6 +20,8 @@ import type {
   MessageData,
   EscalationData,
 } from '@yourgpt/widget-web-sdk/react'
+import { YourGPT } from '@yourgpt/widget-web-sdk'
+import { products as allProducts } from '@/examples/ecommerce/data'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,9 +136,85 @@ const applyCoupon: AIActionHandler = (
   helpers.respond(`Coupon "${code}" applied! Your discount has been reflected in the cart.`)
 }
 
+/**
+ * Compare products in a category and recommend the best one.
+ * Uses page-aware data (products array) to build a live comparison.
+ * Expected args: { category?: string }  — defaults to 'Headphones'
+ */
+const compareProducts: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { category = 'Headphones' } = parseArgs<{ category?: string }>(data)
+
+  const items = allProducts.filter((p) => p.category === category)
+
+  if (items.length === 0) {
+    helpers.respond(`No products found for category "${category}".`)
+    return
+  }
+
+  // Close widget so the full-page overlay animation is unobstructed
+  YourGPT.getInstance()?.close()
+
+  // Notify the page UI to show the scanning overlay
+  window.dispatchEvent(new CustomEvent('ygpt:compare', {
+    detail: { products: items, phase: 'start' },
+  }))
+
+  // Simulate AI analysis time
+  await new Promise<void>((r) => setTimeout(r, 4500))
+
+  // Build comparison response
+  const available = [...items]
+    .filter((p) => p.stock !== 'out_of_stock')
+    .sort((a, b) => b.rating - a.rating)
+  const top = available[0]
+
+  const lines: string[] = [
+    `Here's my comparison of the **${items.length} ${category}** currently in the store:\n`,
+  ]
+
+  for (const p of items) {
+    const discountNote = p.originalPrice
+      ? ` — ~~$${p.originalPrice}~~ **${Math.round((1 - p.price / p.originalPrice) * 100)}% off**`
+      : ''
+    const stockNote =
+      p.stock === 'out_of_stock' ? ' *(out of stock)*'
+      : p.stock === 'low_stock' ? ' *(low stock — hurry!)*'
+      : ''
+    lines.push(
+      `**${p.name}** by ${p.brand} — **$${p.price}**${discountNote}${stockNote}\n` +
+      `⭐ ${p.rating}/5 · ${p.description.split('.')[0]}.`
+    )
+  }
+
+  if (top) {
+    const savingsNote = top.originalPrice
+      ? `, currently **${Math.round((1 - top.price / top.originalPrice) * 100)}% off** (was $${top.originalPrice})`
+      : ''
+    lines.push(
+      `\n✅ **My recommendation: ${top.name}**\n` +
+      `Best overall rating (${top.rating}/5) at **$${top.price}**${savingsNote}. ` +
+      `${available.length < items.length ? 'Some options are currently out of stock.' : 'All options are available to order now.'}`
+    )
+  }
+
+  helpers.respond(lines.join('\n\n'))
+
+  // Signal overlay to transition to done state
+  window.dispatchEvent(new CustomEvent('ygpt:compare', {
+    detail: { products: items, phase: 'done' },
+  }))
+
+  // Reopen widget so user sees the recommendation
+  YourGPT.getInstance()?.open()
+}
+
 export const ecommerceHandlers: Record<string, AIActionHandler> = {
   add_to_cart: addToCart,
   apply_coupon: applyCoupon,
+  compare_products: compareProducts,
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { type Product, type StockStatus, type ProductBadge, type Category, products } from './data'
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type CompareOverlay = {
+  products: Product[]
+  phase: 'scanning' | 'done'
+} | null
 
 // ─── Visual config ────────────────────────────────────────────────────────────
 
@@ -45,14 +51,247 @@ function Stars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) 
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// ─── Compare overlay ─────────────────────────────────────────────────────────
+
+const categoryEmojiMap: Record<string, string> = {
+  Headphones: '🎧',
+  Keyboards: '⌨️',
+  Monitors: '🖥️',
+}
+
+// ─── Keyframe styles injected once ───────────────────────────────────────────
+const BLOB_STYLES = `
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(40px, -30px) scale(1.12); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(-50px, 25px) scale(1.08); }
+  66%       { transform: translate(30px, -40px) scale(1.15); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  50%       { transform: translate(25px, 35px) scale(1.1); }
+}
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(400%); opacity: 0; }
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(0.9); opacity: 0.7; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+`
+
+let stylesInjected = false
+function ensureBlobStyles() {
+  if (stylesInjected) return
+  const el = document.createElement('style')
+  el.textContent = BLOB_STYLES
+  document.head.appendChild(el)
+  stylesInjected = true
+}
+
+// ─── Overlay component ────────────────────────────────────────────────────────
+function CompareOverlayPanel({ overlay }: { overlay: NonNullable<CompareOverlay> }) {
+  const [activeIdx, setActiveIdx] = useState(0)
+  const [progress, setProgress] = useState(0)
+  const [analyzedCount, setAnalyzedCount] = useState(0)
+  const isDone = overlay.phase === 'done'
+  const total = overlay.products.length
+
+  useEffect(() => { ensureBlobStyles() }, [])
+
+  // Pick 5 evenly-spread spotlight cards — never render all N
+  const displayCards = useMemo(() => {
+    if (total <= 5) return overlay.products
+    const step = total / 5
+    return [0, 1, 2, 3, 4].map((i) => overlay.products[Math.min(Math.round(i * step), total - 1)])
+  }, [overlay.products, total])
+
+  // Cycle active card through display cards only
+  useEffect(() => {
+    if (isDone) return
+    const id = setInterval(() => setActiveIdx((i) => (i + 1) % displayCards.length), 900)
+    return () => clearInterval(id)
+  }, [isDone, displayCards.length])
+
+  // Analyzed-count counter: 0 → total over 4.3s
+  useEffect(() => {
+    if (isDone) { setAnalyzedCount(total); return }
+    setAnalyzedCount(0)
+    const start = Date.now()
+    const duration = 4300
+    const id = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / duration)
+      setAnalyzedCount(Math.round((1 - Math.pow(1 - t, 1.5)) * total))
+      if (t >= 1) clearInterval(id)
+    }, 60)
+    return () => clearInterval(id)
+  }, [isDone, total])
+
+  // Progress bar over 4.3s
+  useEffect(() => {
+    if (isDone) { setProgress(100); return }
+    setProgress(0)
+    const start = Date.now()
+    const duration = 4300
+    const id = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / duration)
+      setProgress(Math.round((1 - Math.pow(1 - t, 2.2)) * 97))
+      if (t >= 1) clearInterval(id)
+    }, 40)
+    return () => clearInterval(id)
+  }, [isDone])
+
+  return (
+    <div className="absolute inset-0 z-10 overflow-hidden">
+      {/* ── Heavy backdrop blur ─────────────────────────────────────── */}
+      <div className="absolute inset-0 backdrop-blur-xl bg-white/55" />
+
+      {/* ── Floating purple blobs ───────────────────────────────────── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute w-72 h-72 rounded-full opacity-30" style={{ background: 'radial-gradient(circle, #a855f7 0%, #7c3aed 50%, transparent 70%)', top: '-60px', left: '-40px', filter: 'blur(48px)', animation: 'blob-drift-1 7s ease-in-out infinite' }} />
+        <div className="absolute w-64 h-64 rounded-full opacity-25" style={{ background: 'radial-gradient(circle, #6366f1 0%, #4f46e5 50%, transparent 70%)', bottom: '-40px', right: '-30px', filter: 'blur(52px)', animation: 'blob-drift-2 9s ease-in-out infinite' }} />
+        <div className="absolute w-40 h-40 rounded-full opacity-20" style={{ background: 'radial-gradient(circle, #e879f9 0%, #c026d3 60%, transparent 80%)', top: '35%', left: '45%', filter: 'blur(40px)', animation: 'blob-drift-3 6s ease-in-out infinite' }} />
+      </div>
+
+      {/* ── Content ────────────────────────────────────────────────── */}
+      <div className="absolute inset-0 flex items-center justify-center px-8">
+        <div className="w-full max-w-sm">
+
+          {isDone ? (
+            /* ── Done state ─────────────────────────────── */
+            <div className="rounded-2xl px-6 py-5 flex items-center gap-4" style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(20px)', boxShadow: '0 0 0 1px rgba(167,139,250,0.3), 0 20px 40px rgba(109,40,217,0.12)' }}>
+              <div className="relative shrink-0">
+                <div className="absolute inset-0 rounded-full bg-emerald-400 opacity-30" style={{ animation: 'pulse-ring 1.2s ease-out infinite' }} />
+                <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center relative z-10">
+                  <svg className="w-5 h-5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-800">Analysis complete</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{total} {overlay.products[0]?.category ?? 'products'} compared</p>
+                <p className="text-xs text-violet-500 font-medium mt-0.5">Check the chat for my recommendation →</p>
+              </div>
+            </div>
+
+          ) : (
+            /* ── Scanning state ──────────────────────────── */
+            <div className="rounded-2xl px-5 py-5" style={{ background: 'rgba(255,255,255,0.70)', backdropFilter: 'blur(24px)', boxShadow: '0 0 0 1px rgba(167,139,250,0.35), 0 24px 48px rgba(109,40,217,0.15)' }}>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="relative shrink-0">
+                  <div className="absolute inset-0 rounded-full opacity-40" style={{ background: 'radial-gradient(circle, #a855f7, #7c3aed)', animation: 'pulse-ring 1.4s ease-out infinite' }} />
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center relative z-10" style={{ background: 'linear-gradient(135deg, #a855f7 0%, #6d28d9 100%)' }}>
+                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M22 2 12 12"/>
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800">
+                    Comparing {overlay.products[0]?.category ?? 'products'}
+                  </p>
+                  <p className="text-[11px] text-violet-500 font-medium">AI is reading specs, ratings & pricing</p>
+                </div>
+                {/* Live counter badge */}
+                <div className="shrink-0 text-right">
+                  <p className="text-lg font-black tabular-nums leading-none" style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    {analyzedCount}
+                  </p>
+                  <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">/ {total}</p>
+                </div>
+              </div>
+
+              {/* 5 spotlight cards — fixed height, never overflows */}
+              <div className="space-y-1.5 mb-4">
+                {displayCards.map((p, i) => {
+                  const isActive = i === activeIdx
+                  return (
+                    <div
+                      key={p.id}
+                      className="relative overflow-hidden rounded-xl transition-all duration-500"
+                      style={isActive ? {
+                        background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 100%)',
+                        boxShadow: '0 0 0 1px rgba(167,139,250,0.4), 0 6px 20px rgba(109,40,217,0.25)',
+                      } : {
+                        background: 'rgba(248,250,252,0.8)',
+                      }}
+                    >
+                      {isActive && (
+                        <div className="absolute inset-x-0 h-0.5 z-20" style={{ background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.8), transparent)', animation: 'scan-line 1.6s ease-in-out infinite' }} />
+                      )}
+                      <div className="flex items-center gap-2.5 px-3 py-2 relative z-10">
+                        <span className="text-base shrink-0">{categoryEmojiMap[p.category] ?? '🎧'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-xs font-semibold truncate', isActive ? 'text-white' : 'text-slate-800')}>{p.name}</p>
+                          <p className={cn('text-[10px]', isActive ? 'text-violet-300' : 'text-slate-400')}>{p.brand} · ★ {p.rating}</p>
+                        </div>
+                        <p className={cn('text-xs font-bold tabular-nums shrink-0', isActive ? 'text-violet-300' : 'text-slate-700')}>${p.price}</p>
+                        {isActive && (
+                          <div className="flex gap-0.5 shrink-0">
+                            {[0, 1, 2].map((n) => (
+                              <span key={n} className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${n * 120}ms` }} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Ticker: scrolling product name being "read" */}
+              <div className="mb-3 px-2 py-1.5 rounded-lg overflow-hidden" style={{ background: 'rgba(109,40,217,0.06)' }}>
+                <p className="text-[10px] text-violet-500 truncate tabular-nums">
+                  <span className="font-semibold text-violet-400">Reading · </span>
+                  {overlay.products[analyzedCount % total]?.name ?? '...'}
+                </p>
+              </div>
+
+              {/* Progress */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ background: 'linear-gradient(90deg, #a855f7, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    Analyzing
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 tabular-nums">{progress}%</span>
+                </div>
+                <div className="h-1.5 bg-slate-200/60 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-100 ease-linear" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #a855f7, #6366f1, #818cf8)' }} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 interface ProductDetailProps {
   product: Product
   cartCount: number
   onAddToCart: (productId: string, qty: number) => void
   onSelectProduct: (id: string) => void
+  compareOverlay: CompareOverlay
 }
 
-export default function ProductDetail({ product, onAddToCart, onSelectProduct }: ProductDetailProps) {
+export default function ProductDetail({ product, onAddToCart, onSelectProduct, compareOverlay }: ProductDetailProps) {
   const [qty, setQty] = useState(1)
   const [coupon, setCoupon] = useState('')
   const [couponState, setCouponState] = useState<'idle' | 'ok' | 'err'>('idle')
@@ -88,7 +327,10 @@ export default function ProductDetail({ product, onAddToCart, onSelectProduct }:
   }
 
   return (
-    <div className="flex flex-col h-full bg-white" style={{ fontFamily: "'Plus Jakarta Sans Variable', sans-serif" }}>
+    <div className="flex flex-col h-full bg-white relative" style={{ fontFamily: "'Plus Jakarta Sans Variable', sans-serif" }}>
+
+      {/* ── Compare overlay ───────────────────────────────────────────── */}
+      {compareOverlay && <CompareOverlayPanel overlay={compareOverlay} />}
 
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="px-8 py-7 bg-white shrink-0">

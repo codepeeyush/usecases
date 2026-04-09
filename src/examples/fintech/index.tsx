@@ -65,18 +65,18 @@ export default function FintechExample() {
             <div className="flex items-start justify-between gap-4 mb-1">
               <div>
                 <h1 className="text-xl font-bold text-slate-900 tracking-tight">KYC Verification</h1>
-                <p className="text-xs text-slate-400 mt-1 font-medium">Required by SEBI to activate your account</p>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Required by SEBI to activate your account</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest mb-0.5">Progress</p>
-                <span className="text-2xl font-bold text-slate-200 select-none" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {completedCount}<span className="text-base font-medium text-slate-300">/{kycSteps.length}</span>
+              <div className="text-right shrink-0 bg-white rounded-xl px-4 py-2.5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Progress</p>
+                <span className="text-2xl font-bold text-slate-800 select-none" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {completedCount}<span className="text-base font-semibold text-slate-400">/{kycSteps.length}</span>
                 </span>
               </div>
             </div>
 
             {/* Progress bar */}
-            <div className="mt-4 h-1 bg-slate-200 rounded-full overflow-hidden">
+            <div className="mt-4 h-1.5 bg-slate-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-amber-400 rounded-full transition-all duration-700"
                 style={{ width: `${(completedCount / kycSteps.length) * 100}%` }}
@@ -105,18 +105,18 @@ export default function FintechExample() {
                   : step.status === 'pending' ? (isSelected ? 'bg-slate-400' : 'bg-slate-300')
                   : 'bg-slate-200'
 
-                const labelColor = isSelected ? 'text-slate-800'
-                  : step.status === 'complete' ? 'text-emerald-600'
-                  : step.status === 'error' ? 'text-red-500'
-                  : step.status === 'locked' ? 'text-slate-300'
-                  : 'text-slate-400'
+                const labelColor = isSelected ? 'text-slate-800 font-bold'
+                  : step.status === 'complete' ? 'text-emerald-600 font-semibold'
+                  : step.status === 'error' ? 'text-red-500 font-semibold'
+                  : step.status === 'locked' ? 'text-slate-300 font-medium'
+                  : 'text-slate-400 font-medium'
 
                 return (
                   <button
                     key={step.id}
                     onClick={() => !isLocked && setSelectedId(step.id)}
                     disabled={isLocked}
-                    className="relative z-10 flex flex-col items-center gap-2 cursor-pointer disabled:cursor-not-allowed group"
+                    className="relative z-10 flex flex-col items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                   >
                     <div
                       className={`w-[30px] h-[30px] rounded-full flex items-center justify-center transition-all duration-150 ${circleBg}`}
@@ -140,7 +140,7 @@ export default function FintechExample() {
                         <span className="text-[11px] font-bold text-white">{step.number}</span>
                       )}
                     </div>
-                    <span className={`text-[10px] font-semibold transition-colors ${labelColor}`}>
+                    <span className={`text-[10px] transition-colors ${labelColor}`}>
                       {step.title.split(' ')[0]}
                     </span>
                   </button>
@@ -148,6 +148,22 @@ export default function FintechExample() {
               })}
             </div>
           </div>
+
+          {/* ── Active step banner ─────────────────────────────── */}
+          {selected.status === 'error' && (
+            <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              <svg className="w-4 h-4 text-red-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
+              </svg>
+              <p className="text-xs font-semibold text-red-700">Action required — fix the errors below to continue</p>
+            </div>
+          )}
+          {selected.status === 'active' && (
+            <div className="mb-4 flex items-center gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <p className="text-xs font-semibold text-amber-700">In progress — complete this step to continue</p>
+            </div>
+          )}
 
           {/* ── Step card ─────────────────────────────────────── */}
           <div

@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { products, categories, type Category } from './data'
+import { useState, useEffect } from 'react'
+import { useAIActions } from '@yourgpt/widget-web-sdk/react'
+import { products, categories, type Category, type Product } from './data'
+import { ecommerceHandlers } from '@/yourgpt/handlers'
 import ProductList from './ProductList'
-import ProductDetail from './ProductDetail'
+import ProductDetail, { type CompareOverlay } from './ProductDetail'
 
 interface CartItem {
   productId: string
@@ -12,6 +14,33 @@ export default function EcommerceExample() {
   const [selectedId, setSelectedId] = useState(products[0].id)
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All')
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [compareOverlay, setCompareOverlay] = useState<CompareOverlay>(null)
+
+  const { registerActions } = useAIActions()
+
+  // Register AI action handlers once
+  useEffect(() => {
+    registerActions(ecommerceHandlers)
+  }, [registerActions])
+
+  // Listen for compare events dispatched by the handler
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { products: items, phase } = (e as CustomEvent).detail as {
+        products: Product[]
+        phase: 'start' | 'done'
+      }
+      if (phase === 'start') {
+        setCompareOverlay({ products: items, phase: 'scanning' })
+      }
+      if (phase === 'done') {
+        setCompareOverlay((prev) => prev ? { ...prev, phase: 'done' } : null)
+        setTimeout(() => setCompareOverlay(null), 2500)
+      }
+    }
+    window.addEventListener('ygpt:compare', handler)
+    return () => window.removeEventListener('ygpt:compare', handler)
+  }, [])
 
   const selected = products.find((p) => p.id === selectedId) ?? products[0]
 
@@ -65,7 +94,6 @@ export default function EcommerceExample() {
           </div>
         </div>
 
-        {/* Cart button */}
         <button className="relative flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 rounded-xl cursor-pointer">
           <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
             <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
@@ -81,8 +109,6 @@ export default function EcommerceExample() {
 
       {/* Two-panel body */}
       <div className="flex flex-1 min-h-0">
-
-        {/* Left panel */}
         <div className="w-64 shrink-0 overflow-hidden flex flex-col shadow-[1px_0_0_--theme(--color-slate-100)]">
           <ProductList
             products={filteredProducts}
@@ -93,13 +119,13 @@ export default function EcommerceExample() {
           />
         </div>
 
-        {/* Right panel */}
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-hidden relative">
           <ProductDetail
             product={selected}
             cartCount={totalCartQty}
             onAddToCart={handleAddToCart}
             onSelectProduct={handleSelectProduct}
+            compareOverlay={compareOverlay}
           />
         </div>
       </div>
