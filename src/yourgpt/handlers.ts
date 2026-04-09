@@ -218,54 +218,165 @@ export const ecommerceHandlers: Record<string, AIActionHandler> = {
 }
 
 // ---------------------------------------------------------------------------
-// Fintech / KYC — Help Me Complete This Safely
+// Fintech / Compliance — Help Me Complete This Safely
 // ---------------------------------------------------------------------------
 
+interface ComplianceError {
+  field: string
+  error: string
+  field_id?: string
+  fixable?: boolean
+  suggested_value?: string
+}
+
 /**
- * Trigger the identity verification flow.
- * Expected args: { document_type: string }
+ * Explain why the user is failing compliance checks.
+ * Reads compliance_errors from session data and returns a clear breakdown.
  */
-const verifyIdentity: AIActionHandler = async (
+const explainComplianceErrors: AIActionHandler = (
   data: AIActionData,
   helpers: AIActionHelpers,
 ) => {
-  const { document_type } = parseArgs<{ document_type: string }>(data)
+  const errors: ComplianceError[] = data.session_data?.compliance_errors ?? []
+  const step: string = data.session_data?.current_step ?? 'unknown'
 
-  const confirmed = await helpers.confirm({
-    title: 'Start identity verification?',
-    description: `You'll be guided through uploading your ${document_type}. This is encrypted and secure.`,
-    acceptLabel: 'Start',
-    rejectLabel: 'Not now',
-  })
-
-  if (!confirmed) {
-    helpers.respond('No problem — you can start verification whenever you\'re ready.')
+  if (!errors.length) {
+    helpers.respond(
+      "No errors detected yet. Fill in all the fields and click **Submit for Verification** — if anything doesn't pass, I'll explain exactly what needs to be fixed and can auto-correct the issues for you.",
+    )
     return
   }
 
-  // TODO: open your KYC flow / redirect
-  helpers.respond('Identity verification started. Follow the steps in the panel to complete.')
+  const lines: string[] = [
+    `Here's what's blocking your **${step === 'signatory' ? 'identity verification' : step}** step:\n`,
+  ]
+
+  errors.forEach((e, i) => {
+    lines.push(`**${i + 1}. ${e.field}**`)
+    lines.push(e.error)
+    if (e.fixable && e.suggested_value) {
+      lines.push(`→ I can fix this automatically — the correct value is \`${e.suggested_value}\`. Say "fix my ${e.field.toLowerCase()}" or "fix all errors" to apply it.`)
+    } else {
+      lines.push(`→ This needs to be corrected manually — check the exact value on your physical document.`)
+    }
+    lines.push('')
+  })
+
+  const fixableCount = errors.filter(e => e.fixable).length
+  if (fixableCount > 0) {
+    lines.push(
+      fixableCount === errors.length
+        ? `I can fix all ${fixableCount} issue${fixableCount > 1 ? 's' : ''} automatically. Say **"fix all my errors"** and I'll apply the corrections in one go.`
+        : `I can automatically correct ${fixableCount} of these — say **"fix all errors"** to apply the auto-fixes.`,
+    )
+  }
+
+  helpers.respond(lines.join('\n'))
 }
 
 /**
- * Submit a document for KYC review.
- * Expected args: { document_type: string; document_url?: string }
+ * Auto-fix one or all compliance fields.
+ * Expected args: { field_id?: string } — omit or pass "all" to fix everything fixable.
+ * Dispatches ygpt:fintech:fix_field for each corrected field.
  */
-const submitDocument: AIActionHandler = (
+const fixComplianceField: AIActionHandler = async (
   data: AIActionData,
   helpers: AIActionHelpers,
 ) => {
-  const { document_type } = parseArgs<{ document_type: string; document_url?: string }>(data)
+  const { field_id } = parseArgs<{ field_id?: string }>(data)
+  const errors: ComplianceError[] = data.session_data?.compliance_errors ?? []
 
-  // TODO: trigger document submission to your backend
+  if (!errors.length) {
+    helpers.respond(
+      "There are no active errors to fix. Submit the form first — if any fields fail validation I'll be able to correct them for you.",
+    )
+    return
+  }
+
+  // "all" or no field_id → fix everything fixable; otherwise fix the named field
+  const fixAll = !field_id || field_id === 'all'
+  const targets = fixAll
+    ? errors.filter(e => e.fixable && e.suggested_value)
+    : errors.filter(e => e.field_id === field_id && e.fixable && e.suggested_value)
+
+  if (targets.length === 0) {
+    const unfixable = errors.find(e => e.field_id === field_id)
+    helpers.respond(
+      unfixable
+        ? `I can't automatically fix **${unfixable.field}** — this needs to be corrected manually by checking your document.`
+        : "I couldn't find that field in the current errors. Try asking me to fix all errors instead.",
+    )
+    return
+  }
+
+  const fieldsList = targets.map(t => `**${t.field}** → \`${t.suggested_value}\``).join('\n')
+
+  const confirmed = await helpers.confirm({
+    title: targets.length === 1 ? `Fix ${targets[0].field}?` : `Fix ${targets.length} fields?`,
+    description: `I'll apply these corrections:\n${fieldsList}`,
+    acceptLabel: 'Apply fixes',
+    rejectLabel: 'Cancel',
+  })
+
+  if (!confirmed) {
+    helpers.respond("No problem — nothing has been changed.")
+    return
+  }
+
+  for (const t of targets) {
+    window.dispatchEvent(
+      new CustomEvent('ygpt:fintech:fix_field', {
+        detail: { field_id: t.field_id, value: t.suggested_value },
+      }),
+    )
+  }
+
+  const fixedList = targets.map(t => `**${t.field}** → \`${t.suggested_value}\``).join(', ')
+  const remaining = errors.filter(e => !targets.find(t => t.field_id === e.field_id))
+
   helpers.respond(
-    `Your ${document_type} has been submitted for review. We'll notify you within 1–2 business days.`,
+    remaining.length === 0
+      ? `All done! Fixed: ${fixedList}. Click **"Retry Verification"** — everything should pass now.`
+      : `Fixed: ${fixedList}. The remaining field${remaining.length > 1 ? 's' : ''} (${remaining.map(e => e.field).join(', ')}) need${remaining.length === 1 ? 's' : ''} manual correction. Then click **"Retry Verification"**.`,
   )
 }
 
+/**
+ * Explain a specific compliance field in plain language.
+ * Expected args: { field_name: string }
+ */
+const explainField: AIActionHandler = (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { field_name } = parseArgs<{ field_name: string }>(data)
+
+  const explanations: Record<string, string> = {
+    'tax id': '**Tax Identification Number (Tax ID)** is a government-issued number used to identify your business for tax purposes.\n\n- 🇺🇸 **EIN** (US): Format `XX-XXXXXXX`, issued by the IRS\n- 🇪🇺 **VAT** (EU): Format `XXXXXXXXXXXX`, issued by your national tax authority\n- 🇦🇺 **ABN** (Australia): 11-digit number, issued by the ATO\n- 🇬🇧 **CRN** (UK): 8-character company registration number\n\nIf your business is below the tax registration threshold in your country, you can skip this field for now.',
+    'government id': '**Government ID Number** is the unique identifier on your passport, driver\'s license, or national ID card.\n\n- Must be current and not expired\n- Enter digits only — no spaces, hyphens, or special characters\n- Accepted: Passport, Driver\'s License, National ID card\n\nExample: `DL48291234` (not `DL-4829X1`)',
+    'date of birth': '**Date of Birth** must exactly match the date printed on your government-issued ID document.\n\n- Use the format `MM/DD/YYYY`\n- If your passport shows `14 SEP 1991`, enter `09/14/1991`\n- The date on your driver\'s license and passport may differ — use whichever document you submitted as your Government ID',
+    'iban': '**IBAN (International Bank Account Number)** is a standardised format used by banks globally.\n\n- Starts with a 2-letter country code (e.g. `DE`, `FR`, `GB`)\n- Followed by 2 check digits\n- Then your bank account details\n\nExample: `GB29NWBK60161331926819`. Found on your bank statement or online banking portal.',
+    'swift': '**SWIFT / BIC code** identifies your specific bank branch internationally.\n\n- 8 or 11 characters long\n- Format: Bank code (4) + Country code (2) + Location code (2) + optional branch (3)\n\nExample: `CHASUS33` (JPMorgan Chase, US). Found on international wire transfer forms from your bank.',
+    'routing': '**Routing Number** (US) or **Sort Code** (UK) identifies your bank branch for domestic transfers.\n\n- 🇺🇸 US Routing: 9-digit number printed at the bottom-left of your cheque\n- 🇬🇧 UK Sort Code: 6-digit number in format `XX-XX-XX`\n\nFor international transfers, use the SWIFT/BIC code instead.',
+  }
+
+  const key = Object.keys(explanations).find(k =>
+    field_name.toLowerCase().includes(k),
+  )
+
+  if (key) {
+    helpers.respond(explanations[key])
+  } else {
+    helpers.respond(
+      `I don't have a specific explanation for **${field_name}** yet, but here's the general rule: enter the value exactly as it appears on your official documents, without special characters or extra spaces. If you're still unsure, check the hint text beneath the field or share the exact error message with me.`,
+    )
+  }
+}
+
 export const fintechHandlers: Record<string, AIActionHandler> = {
-  verify_identity: verifyIdentity,
-  submit_document: submitDocument,
+  explain_compliance_errors: explainComplianceErrors,
+  fix_compliance_field: fixComplianceField,
+  explain_field: explainField,
 }
 
 // ---------------------------------------------------------------------------

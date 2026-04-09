@@ -1,0 +1,45 @@
+FounderStack — Payment Onboarding Demo Fill Guide
+==================================================
+
+STEP 1: Business Details
+─────────────────────────
+Registered Legal Name:     Waverly Software Inc.
+Business Structure:        Limited Liability Company (LLC)
+Business Website:          waverl.io        (enter without https://)
+Tax Identification Number: 82-4719302
+
+→ Click "Confirm & Continue" — saves and auto-advances to Step 2
+
+
+STEP 2: Authorized Signatory  (fill with intentional errors — demo the AI assistant here)
+──────────────────────────────
+Full Legal Name:           Jordan Riley
+Government ID Number:      DL-4829X1       ← ERROR: has hyphen, not accepted
+Date of Birth:             09/14/1991      ← WARNING: doesn't match ID on file
+Country of Residence:      United States
+
+Click "Submit for Verification" → spins → shows inline field errors
+→ Ask the chatbot: "Why am I failing compliance?"
+→ Ask: "Can you fix my errors?" → AI fixes both fields (ID + DOB)
+→ Click "Retry Verification" → succeeds → advances to Step 3
+
+CORRECT values (what the AI will fix to):
+  Government ID Number:    DL48291234      (hyphen removed)
+  Date of Birth:           09/14/1990      (correct DOB on file)
+
+
+STEP 3: Settlement Account  (locked until Step 2 passes)
+─────────────────────────────
+Account Holder Name:       Waverly Software Inc.
+Account Number / IBAN:     000123456789
+Routing / SWIFT Code:      021000021
+Settlement Currency:       USD — US Dollar
+
+
+NOTES
+─────
+- Step 2 is intentionally broken to demonstrate AI chatbot value
+- The assistant can explain: PAN/ID formats, why DOB mismatches happen,
+  what documents are accepted, and how to fix each error
+- "RBI regulated" in footer will be updated to "PCI-DSS compliant"
+  once global branding is finalized
