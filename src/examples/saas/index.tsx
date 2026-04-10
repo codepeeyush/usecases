@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAIActions } from '@yourgpt/widget-web-sdk/react'
+import { useAIActions, useYourGPT } from '@yourgpt/widget-web-sdk/react'
 import { YourGPTSDK } from '@yourgpt/widget-web-sdk'
+import { builtinHandlers, startPageObserver } from '@/yourgpt/builtin'
 import { integrations as baseIntegrations, Integration } from './data'
+import type { AIActionData } from '@yourgpt/widget-web-sdk/react'
 import IntegrationList from './IntegrationList'
 import IntegrationDetail from './IntegrationDetail'
 import DebugPanel from './DebugPanel'
@@ -13,11 +15,22 @@ function generateFakeToken() {
   return `xoxb-${seg(10)}-${seg(10)}-${seg(24)}`
 }
 
+function parseArgs<T = Record<string, unknown>>(data: AIActionData): T {
+  try {
+    return JSON.parse(data.action?.tool?.function?.arguments ?? '{}') as T
+  } catch {
+    return {} as T
+  }
+}
+
 
 interface AIOverlayState {
   steps: AIStep[]
   token?: string
   phase: 'running' | 'done'
+  runningSubtitle?: string
+  doneTitle?: string
+  doneSubtitle?: string
 }
 
 const settingsNav = [
@@ -74,68 +87,248 @@ export default function SaasExample() {
   const handleFixRef = useRef(handleFix)
   useEffect(() => { handleFixRef.current = handleFix }, [handleFix])
 
-  // Register the fix_integration AI action
-  const { registerAction, unregisterAction } = useAIActions()
+  // Ref so action closures always read the latest integrations state
+  const integrationsRef = useRef(integrations)
+  useEffect(() => { integrationsRef.current = integrations }, [integrations])
+
+  const { sdk } = useYourGPT()
+
+  // Register builtin get_page_context + auto-sync DOM
+  const { registerActions, registerAction, unregisterAction } = useAIActions()
+  useEffect(() => {
+    registerActions(builtinHandlers)
+  }, [registerActions])
+  useEffect(() => {
+    if (!sdk) return
+    return startPageObserver(sdk)
+  }, [sdk])
+
+  // Register 4 chained AI tools
   useEffect(() => {
     const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-    registerAction('fix_integration', async (_data, helpers) => {
-      const slack = baseIntegrations.find(i => i.id === 'slack')
-      const STEPS: { id: string; label: string; detail?: string }[] = [
-        { id: 'capture',  label: 'Capturing page state',
-          detail: 'Reading DOM, active alerts, and session data' },
-        { id: 'analyze',  label: 'Analyzing integration errors',
-          detail: `Found: Slack · Status Failed · Failing for ${slack?.failingSince ?? '—'} · ${slack?.blockedCount ?? 0} notifications blocked` },
-        { id: 'diagnose', label: 'Root cause identified',
-          detail: `Bot Token ${slack?.botToken} rejected — 401 Unauthorized. Token has expired or been revoked in workspace settings.` },
-        { id: 'navigate', label: 'Navigating to Developer Settings' },
-        { id: 'generate', label: 'Generating new OAuth token' },
-        { id: 'apply',    label: 'Applying token fix' },
-        { id: 'verify',   label: 'Verifying connection with Slack API' },
+    // ── Tool 1: get_integration_status ──────────────────────────────────────
+    registerAction('get_integration_status', (data, helpers) => {
+      const { integration_id } = parseArgs<{ integration_id?: string }>(data)
+      const live = integrationsRef.current
+      const targets = integration_id ? live.filter(i => i.id === integration_id) : live
+
+      setActiveNav('integrations')
+
+      if (targets.length === 0) {
+        helpers.respond(`No integration found: "${integration_id}". Available: ${live.map(i => i.id).join(', ')}.`)
+        return
+      }
+
+      const failed = targets.filter(i => i.status === 'failed')
+      const lines: string[] = []
+
+      for (const i of targets) {
+        if (i.status === 'failed') {
+          lines.push(`${i.name} [${i.id}]: FAILED — ${i.errorCode}: ${i.errorMessage} Failing for ${i.failingSince ?? 'unknown'}. ${i.blockedCount ?? 0} events blocked.`)
+        } else {
+          lines.push(`${i.name} [${i.id}]: ${i.status}. Last synced: ${i.lastSynced ?? 'never'}.`)
+        }
+      }
+
+      if (failed.length > 0) {
+        lines.push(`\nTo investigate: call diagnose_integration with integration_id="${failed[0].id}".`)
+      } else {
+        lines.push('\nAll integrations are healthy. No action needed.')
+      }
+
+      helpers.respond(lines.join('\n'))
+    })
+
+    // ── Tool 2: diagnose_integration ────────────────────────────────────────
+    registerAction('diagnose_integration', async (data, helpers) => {
+      const { integration_id } = parseArgs<{ integration_id: string }>(data)
+      const integration = integrationsRef.current.find(i => i.id === integration_id)
+
+      if (!integration) {
+        helpers.respond(`Integration "${integration_id}" not found. Call get_integration_status to see available integrations.`)
+        return
+      }
+      if (integration.status !== 'failed') {
+        helpers.respond(`${integration.name} is currently "${integration.status}" — no diagnosis needed.`)
+        return
+      }
+
+      const STEPS: AIStep[] = [
+        { id: 'read-logs',       label: 'Reading error logs & request history', status: 'active' },
+        { id: 'analyze-pattern', label: 'Analyzing failure pattern',            status: 'pending' },
+        { id: 'root-cause',      label: 'Root cause identified',                status: 'pending' },
       ]
 
-      const makeSteps = (activeIdx: number, doneUntil: number): AIStep[] =>
-        STEPS.map((s, i) => ({
-          ...s,
-          status: i < doneUntil ? 'done' : i === activeIdx ? 'active' : 'pending',
-        }))
-
       YourGPTSDK.getInstance().close()
-      setAiOverlay({ steps: makeSteps(0, 0), phase: 'running' })
-      await delay(1000)
+      setAiOverlay({ steps: STEPS, phase: 'running', runningSubtitle: `Diagnosing ${integration.name}…` } as AIOverlayState)
+      await delay(1200)
 
-      setAiOverlay({ steps: makeSteps(1, 1), phase: 'running' })
-      await delay(1400)
+      setAiOverlay({ steps: STEPS.map((s, i) => ({ ...s, status: (i < 1 ? 'done' : i === 1 ? 'active' : 'pending') as AIStep['status'] })), phase: 'running', runningSubtitle: `Diagnosing ${integration.name}…` })
+      await delay(1600)
 
-      setAiOverlay({ steps: makeSteps(2, 2), phase: 'running' })
-      await delay(1800)
+      setAiOverlay({ steps: STEPS.map((s, i) => ({ ...s, status: (i < 2 ? 'done' : 'active') as AIStep['status'] })), phase: 'running', runningSubtitle: `Diagnosing ${integration.name}…` })
+      await delay(1200)
 
-      setAiOverlay({ steps: makeSteps(3, 3), phase: 'running' })
-      setActiveNav('developer')
-      await delay(900)
-
-      const token = generateFakeToken()
-      setAiOverlay({ steps: makeSteps(4, 4), token, phase: 'running' })
-      await delay(1800)
-
-      setAiOverlay({ steps: makeSteps(5, 5), token, phase: 'running' })
-      handleFixRef.current('slack', token)
-      await delay(900)
-
-      setAiOverlay({ steps: makeSteps(6, 6), token, phase: 'running' })
-      await delay(1300)
-
-      setAiOverlay({ steps: makeSteps(-1, 7), token, phase: 'done' })
-      await delay(1400)
       setAiOverlay(null)
 
+      // Build diagnosis based on error type
+      const code = integration.errorCode ?? ''
+      let rootCause: string
+      let recommendation: string
+
+      if (code.startsWith('401')) {
+        rootCause = `Bot token \`${integration.botToken}\` has been revoked or expired in workspace settings.`
+        recommendation = `call fix_integration with integration_id="${integration_id}" to regenerate the OAuth token.`
+      } else if (code.startsWith('403')) {
+        rootCause = `The app was authorized with read-only scopes (${(integration.scopes ?? []).join(', ')}) but write access is required for syncing.`
+        recommendation = `call fix_integration with integration_id="${integration_id}" to re-authorize with expanded OAuth scopes.`
+      } else if (code.startsWith('429')) {
+        rootCause = `The bulk sync job polls every 5 minutes, consuming all ${integration.errorMessage?.match(/\d+,\d+|\d+/)?.[0] ?? '15,000'} daily API calls before midnight. Needs batch size reduction or an Enterprise API tier.`
+        recommendation = `call fix_integration with integration_id="${integration_id}" to apply rate-limit mitigation.`
+      } else if (code.startsWith('400')) {
+        rootCause = `The stored webhook secret is stale — Intercom rotated the secret in the dashboard but the local copy was never updated. Every incoming webhook now fails HMAC validation.`
+        recommendation = `call fix_integration with integration_id="${integration_id}" to update the webhook secret.`
+      } else {
+        rootCause = `Unknown error — ${integration.errorCode}: ${integration.errorMessage}`
+        recommendation = `call fix_integration with integration_id="${integration_id}" to attempt a reconnect.`
+      }
+
       helpers.respond(
-        '✓ Done! I captured the page state, identified the root cause (expired bot token returning 401 Unauthorized), navigated to Developer Settings, generated a fresh OAuth token, and reconnected Slack. The integration is now active and all systems are healthy.'
+        `Diagnosis for ${integration.name}:\n` +
+        `Error: ${integration.errorCode} — ${integration.errorMessage}\n` +
+        `Failing for ${integration.failingSince}. ${integration.blockedCount} events blocked.\n\n` +
+        `Root cause: ${rootCause}\n\n` +
+        `Next step: ${recommendation}`
       )
       YourGPTSDK.getInstance().open()
     })
 
-    return () => unregisterAction('fix_integration')
+    // ── Tool 3: fix_integration ──────────────────────────────────────────────
+    registerAction('fix_integration', async (data, helpers) => {
+      const { integration_id } = parseArgs<{ integration_id: string }>(data)
+      const integration = integrationsRef.current.find(i => i.id === integration_id)
+
+      if (!integration) {
+        helpers.respond(`Integration "${integration_id}" not found. Call get_integration_status to see available integrations.`)
+        return
+      }
+      if (integration.status !== 'failed') {
+        helpers.respond(`${integration.name} is currently "${integration.status}" — nothing to fix.`)
+        return
+      }
+
+      const code = integration.errorCode ?? ''
+      const is403 = code.startsWith('403')
+      const is429 = code.startsWith('429')
+      const is400 = code.startsWith('400')
+
+      // Step labels vary by failure type
+      const actionLabel = is403
+        ? 'Re-authorizing OAuth with expanded scopes'
+        : is429
+        ? 'Adjusting sync frequency & batch size'
+        : is400
+        ? 'Fetching new webhook secret'
+        : 'Generating new OAuth token'
+
+      const ALL_STEPS: AIStep[] = [
+        { id: 'capture',  label: 'Integration status captured',      status: 'done' },
+        { id: 'analyze',  label: 'Error logs analyzed',              status: 'done' },
+        { id: 'diagnose', label: 'Root cause identified',            status: 'done' },
+        { id: 'navigate', label: 'Navigating to Developer Settings', status: 'active' },
+        { id: 'generate', label: actionLabel,                        status: 'pending' },
+        { id: 'apply',    label: 'Applying fix',                     status: 'pending' },
+        { id: 'save',     label: 'Saving changes',                   status: 'pending' },
+      ]
+
+      const makeSteps = (activeIdx: number): AIStep[] =>
+        ALL_STEPS.map((s, i) => ({
+          ...s,
+          status: (i < 3 ? 'done' : i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'pending') as AIStep['status'],
+        }))
+
+      const overlaySubtitle = `Fixing ${integration.name}…`
+      const token = is403 || is429 || is400 ? undefined : generateFakeToken()
+
+      YourGPTSDK.getInstance().close()
+      setAiOverlay({ steps: makeSteps(3), phase: 'running', runningSubtitle: overlaySubtitle })
+      setActiveNav('developer')
+      await delay(900)
+
+      setAiOverlay({ steps: makeSteps(4), token, phase: 'running', runningSubtitle: overlaySubtitle })
+      await delay(1800)
+
+      setAiOverlay({ steps: makeSteps(5), token, phase: 'running', runningSubtitle: overlaySubtitle })
+      handleFixRef.current(integration_id, token ?? `fixed-${Date.now()}`)
+      await delay(900)
+
+      setAiOverlay({ steps: makeSteps(6), token, phase: 'running', runningSubtitle: overlaySubtitle })
+      await delay(800)
+
+      const doneName = `${integration.name} reconnected`
+      const doneSub = is403
+        ? 'Write scopes granted · CRM sync resumed'
+        : is429
+        ? 'Batch mode enabled · API quota conserved'
+        : is400
+        ? 'Webhook secret updated · Events resuming'
+        : 'New token applied · All systems healthy'
+
+      setAiOverlay({ steps: ALL_STEPS.map(s => ({ ...s, status: 'done' as const })), token, phase: 'done', doneTitle: doneName, doneSubtitle: doneSub })
+      await delay(1400)
+      setAiOverlay(null)
+
+      helpers.respond(
+        `Fix applied to ${integration.name}.\n` +
+        `${doneSub}.\n\n` +
+        `Next step: call verify_integration with integration_id="${integration_id}" to confirm the API connection is healthy.`
+      )
+      YourGPTSDK.getInstance().open()
+    })
+
+    // ── Tool 4: verify_integration ───────────────────────────────────────────
+    registerAction('verify_integration', async (data, helpers) => {
+      const { integration_id } = parseArgs<{ integration_id: string }>(data)
+      const integration = integrationsRef.current.find(i => i.id === integration_id)
+
+      if (!integration) {
+        helpers.respond(`Integration "${integration_id}" not found.`)
+        return
+      }
+
+      YourGPTSDK.getInstance().close()
+      setAiOverlay({
+        steps: [{ id: 'verify', label: `Verifying API connection with ${integration.name}`, status: 'active' }],
+        phase: 'running',
+        runningSubtitle: `Verifying ${integration.name}…`,
+      })
+      await delay(1300)
+
+      setAiOverlay({
+        steps: [{ id: 'verify', label: `Verifying API connection with ${integration.name}`, status: 'done' }],
+        phase: 'done',
+        doneTitle: `${integration.name} verified`,
+        doneSubtitle: 'Connection healthy · All API calls succeeding',
+      })
+      await delay(1400)
+      setAiOverlay(null)
+
+      const currentStatus = integrationsRef.current.find(i => i.id === integration_id)?.status ?? 'unknown'
+      helpers.respond(
+        currentStatus === 'connected'
+          ? `${integration.name} is connected and healthy. All API calls are succeeding. No further action needed.`
+          : `${integration.name} status is "${currentStatus}". If still failing, call diagnose_integration again to recheck.`
+      )
+      YourGPTSDK.getInstance().open()
+    })
+
+    return () => {
+      unregisterAction('get_integration_status')
+      unregisterAction('diagnose_integration')
+      unregisterAction('fix_integration')
+      unregisterAction('verify_integration')
+    }
   }, [registerAction, unregisterAction])
 
 
@@ -198,6 +391,9 @@ export default function SaasExample() {
             steps={aiOverlay.steps}
             token={aiOverlay.token}
             phase={aiOverlay.phase}
+            runningSubtitle={aiOverlay.runningSubtitle}
+            doneTitle={aiOverlay.doneTitle}
+            doneSubtitle={aiOverlay.doneSubtitle}
           />
         )}
 

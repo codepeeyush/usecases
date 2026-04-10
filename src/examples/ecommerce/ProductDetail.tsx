@@ -281,6 +281,197 @@ function CompareOverlayPanel({ overlay }: { overlay: NonNullable<CompareOverlay>
   )
 }
 
+// ─── Cart steps overlay ───────────────────────────────────────────────────────
+
+export type CartOverlayPhase =
+  | 'checking'
+  | 'out_of_stock'
+  | 'adding'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'coupon_failed'
+  | 'coupon_applied'
+  | 'applying_coupon'
+
+export type CartOverlay = {
+  phase: CartOverlayPhase
+  productName: string
+  couponCode?: string
+  discount?: number
+} | null
+
+type StepState = 'idle' | 'active' | 'done' | 'error'
+
+function StepRow({
+  icon,
+  label,
+  state,
+  sub,
+}: {
+  icon: string
+  label: string
+  state: StepState
+  sub?: string
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className={cn(
+          'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-sm transition-all duration-300',
+          state === 'done'   ? 'bg-emerald-500 text-white' :
+          state === 'error'  ? 'bg-red-500 text-white' :
+          state === 'active' ? 'text-white' : 'bg-slate-100 text-slate-400',
+        )}
+        style={state === 'active' ? { background: 'linear-gradient(135deg,#a855f7,#6d28d9)' } : undefined}
+      >
+        {state === 'done'   ? '✓' :
+         state === 'error'  ? '✗' :
+         state === 'active' ? <span className="animate-pulse">{icon}</span> : icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={cn(
+          'text-xs font-semibold',
+          state === 'done'  ? 'text-emerald-700' :
+          state === 'error' ? 'text-red-600' :
+          state === 'active'? 'text-slate-800' : 'text-slate-400',
+        )}>
+          {label}
+        </p>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+      {state === 'active' && (
+        <div className="flex gap-0.5 shrink-0">
+          {[0,1,2].map((n) => (
+            <span key={n} className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${n*120}ms` }} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CartStepsOverlay({ overlay }: { overlay: NonNullable<CartOverlay> }) {
+  const { phase, productName, couponCode, discount } = overlay
+
+  const stepState = (forPhase: CartOverlayPhase): StepState => {
+    const order: CartOverlayPhase[] = ['checking', 'adding', 'done']
+    const errorPhases: CartOverlayPhase[] = ['out_of_stock', 'failed', 'cancelled', 'coupon_failed']
+    const successPhases: CartOverlayPhase[] = ['done', 'coupon_applied']
+
+    if (errorPhases.includes(phase) && forPhase === 'checking') return 'error'
+    if (forPhase === phase) return successPhases.includes(phase) ? 'done' : 'active'
+    const currentIdx = order.indexOf(phase)
+    const forIdx = order.indexOf(forPhase)
+    if (currentIdx > forIdx) return 'done'
+    return 'idle'
+  }
+
+  const isCouponFlow = ['applying_coupon','coupon_applied','coupon_failed'].includes(phase)
+  const isErrorPhase = ['out_of_stock','failed','cancelled','coupon_failed'].includes(phase)
+  const isDone = phase === 'done' || phase === 'coupon_applied'
+
+  return (
+    <div className="absolute inset-0 z-20 overflow-hidden">
+      <div className="absolute inset-0 backdrop-blur-xl bg-white/60" />
+
+      {/* Ambient blobs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute w-56 h-56 rounded-full opacity-20" style={{ background: 'radial-gradient(circle,#a855f7,#7c3aed,transparent 70%)', top: '-30px', right: '-20px', filter: 'blur(40px)', animation: 'blob-drift-1 7s ease-in-out infinite' }} />
+        <div className="absolute w-48 h-48 rounded-full opacity-15" style={{ background: 'radial-gradient(circle,#6366f1,#4f46e5,transparent 70%)', bottom: '-20px', left: '-10px', filter: 'blur(44px)', animation: 'blob-drift-2 9s ease-in-out infinite' }} />
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center px-8">
+        <div
+          className="w-full max-w-xs rounded-2xl px-5 py-5 space-y-3"
+          style={{ background: 'rgba(255,255,255,0.80)', backdropFilter: 'blur(24px)', boxShadow: '0 0 0 1px rgba(167,139,250,0.3), 0 20px 40px rgba(109,40,217,0.14)' }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="relative shrink-0">
+              <div
+                className="absolute inset-0 rounded-full opacity-35"
+                style={{ animation: 'pulse-ring 1.4s ease-out infinite', background: isDone ? '#10b981' : isErrorPhase ? '#ef4444' : '#a855f7' }}
+              />
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center relative z-10 text-white text-sm"
+                style={{ background: isDone ? '#10b981' : isErrorPhase ? '#ef4444' : 'linear-gradient(135deg,#a855f7,#6d28d9)' }}
+              >
+                {isDone ? '✓' : isErrorPhase ? '✗' : '🛒'}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-slate-800 truncate">
+                {isDone && !isCouponFlow ? 'Added to cart!'
+                 : isDone && isCouponFlow ? 'Coupon applied!'
+                 : isErrorPhase ? phase === 'out_of_stock' ? 'Out of stock'
+                                : phase === 'cancelled'   ? 'Cancelled'
+                                : phase === 'coupon_failed' ? 'Invalid coupon'
+                                : 'Unavailable'
+                 : isCouponFlow ? 'Applying coupon…'
+                 : 'Updating cart…'}
+              </p>
+              <p className="text-[11px] text-violet-500 font-medium truncate">{productName}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            {isCouponFlow ? (
+              <>
+                <StepRow
+                  icon="🏷"
+                  label="Validating coupon code"
+                  state={phase === 'coupon_failed' ? 'error' : phase === 'applying_coupon' ? 'active' : 'done'}
+                />
+                <StepRow
+                  icon="💰"
+                  label={couponCode ? `${discount}% off with ${couponCode}` : 'Applying discount'}
+                  state={phase === 'coupon_failed' ? 'idle' : phase === 'applying_coupon' ? 'idle' : 'done'}
+                  sub={discount ? `Save ${discount}% on your order` : undefined}
+                />
+              </>
+            ) : (
+              <>
+                <StepRow
+                  icon="🔍"
+                  label="Checking availability"
+                  state={stepState('checking')}
+                  sub={phase === 'out_of_stock' ? 'This item is out of stock' : undefined}
+                />
+                <StepRow
+                  icon="➕"
+                  label="Adding to cart"
+                  state={
+                    ['out_of_stock','failed','cancelled'].includes(phase) ? 'idle'
+                    : stepState('adding')
+                  }
+                />
+                <StepRow
+                  icon="✅"
+                  label="Done"
+                  state={phase === 'done' ? 'done' : 'idle'}
+                />
+              </>
+            )}
+          </div>
+
+          {phase === 'out_of_stock' && (
+            <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+              Finding the best available alternative…
+            </p>
+          )}
+          {couponCode && phase === 'coupon_applied' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100 mt-1">
+              <span className="text-emerald-600 font-bold text-xs">{couponCode}</span>
+              <span className="text-emerald-500 text-[11px]">applied — {discount}% off</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface ProductDetailProps {
@@ -289,9 +480,10 @@ interface ProductDetailProps {
   onAddToCart: (productId: string, qty: number) => void
   onSelectProduct: (id: string) => void
   compareOverlay: CompareOverlay
+  cartOverlay: CartOverlay
 }
 
-export default function ProductDetail({ product, onAddToCart, onSelectProduct, compareOverlay }: ProductDetailProps) {
+export default function ProductDetail({ product, onAddToCart, onSelectProduct, compareOverlay, cartOverlay }: ProductDetailProps) {
   const [qty, setQty] = useState(1)
   const [coupon, setCoupon] = useState('')
   const [couponState, setCouponState] = useState<'idle' | 'ok' | 'err'>('idle')
@@ -331,6 +523,9 @@ export default function ProductDetail({ product, onAddToCart, onSelectProduct, c
 
       {/* ── Compare overlay ───────────────────────────────────────────── */}
       {compareOverlay && <CompareOverlayPanel overlay={compareOverlay} />}
+
+      {/* ── Cart steps overlay ────────────────────────────────────────── */}
+      {cartOverlay && !compareOverlay && <CartStepsOverlay overlay={cartOverlay} />}
 
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="px-8 py-7 bg-white shrink-0">

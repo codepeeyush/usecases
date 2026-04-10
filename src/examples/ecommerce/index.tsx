@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useAIActions } from '@yourgpt/widget-web-sdk/react'
+import { useAIActions, useYourGPT } from '@yourgpt/widget-web-sdk/react'
 import { products, categories, type Category, type Product } from './data'
 import { ecommerceHandlers } from '@/yourgpt/handlers'
+import { builtinHandlers, startPageObserver } from '@/yourgpt/builtin'
 import ProductList from './ProductList'
-import ProductDetail, { type CompareOverlay } from './ProductDetail'
+import ProductDetail, { type CompareOverlay, type CartOverlay, type CartOverlayPhase } from './ProductDetail'
 
 interface CartItem {
   productId: string
@@ -15,13 +16,21 @@ export default function EcommerceExample() {
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All')
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [compareOverlay, setCompareOverlay] = useState<CompareOverlay>(null)
+  const [cartOverlay, setCartOverlay] = useState<CartOverlay>(null)
 
   const { registerActions } = useAIActions()
+  const { sdk } = useYourGPT()
 
   // Register AI action handlers once
   useEffect(() => {
-    registerActions(ecommerceHandlers)
+    registerActions({ ...ecommerceHandlers, ...builtinHandlers })
   }, [registerActions])
+
+  // Auto-sync DOM state to widget on every mutation/navigation
+  useEffect(() => {
+    if (!sdk) return
+    return startPageObserver(sdk)
+  }, [sdk])
 
   // Listen for compare events dispatched by the handler
   useEffect(() => {
@@ -40,6 +49,30 @@ export default function EcommerceExample() {
     }
     window.addEventListener('ygpt:compare', handler)
     return () => window.removeEventListener('ygpt:compare', handler)
+  }, [])
+
+  // Listen for cart step events dispatched by the handler
+  useEffect(() => {
+    const AUTO_DISMISS: CartOverlayPhase[] = ['done', 'cancelled', 'coupon_applied']
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        phase: CartOverlayPhase
+        productName?: string
+        couponCode?: string
+        discount?: number
+      }
+      setCartOverlay({
+        phase: detail.phase,
+        productName: detail.productName ?? '',
+        couponCode: detail.couponCode,
+        discount: detail.discount,
+      })
+      if (AUTO_DISMISS.includes(detail.phase)) {
+        setTimeout(() => setCartOverlay(null), 2500)
+      }
+    }
+    window.addEventListener('ygpt:cart', handler)
+    return () => window.removeEventListener('ygpt:cart', handler)
   }, [])
 
   const selected = products.find((p) => p.id === selectedId) ?? products[0]
@@ -126,6 +159,7 @@ export default function EcommerceExample() {
             onAddToCart={handleAddToCart}
             onSelectProduct={handleSelectProduct}
             compareOverlay={compareOverlay}
+            cartOverlay={cartOverlay}
           />
         </div>
       </div>

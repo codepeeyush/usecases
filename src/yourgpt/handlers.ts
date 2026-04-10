@@ -21,7 +21,7 @@ import type {
   EscalationData,
 } from '@yourgpt/widget-web-sdk/react'
 import { YourGPT } from '@yourgpt/widget-web-sdk'
-import { products as allProducts } from '@/examples/ecommerce/data'
+import { products as allProducts, type StockStatus, type Product } from '@/examples/ecommerce/data'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,158 +37,107 @@ function parseArgs<T = Record<string, unknown>>(data: AIActionData): T {
 }
 
 // ---------------------------------------------------------------------------
-// SaaS / B2B — Fix & Guide Me Instantly
+// SaaS / B2B — Tool Chain (get status → diagnose → fix → verify)
 // ---------------------------------------------------------------------------
+//
+// NOTE: Real implementations are registered inside SaasExample (index.tsx)
+// via useAIActions() because they need live React state.
+// These stubs are kept for documentation and server-side usage patterns.
 
-/**
- * Reconnect a failing integration (e.g. Slack token expired).
- * Expected args: { integration_id: string }
- */
-const reconnectIntegration: AIActionHandler = async (
-  data: AIActionData,
-  helpers: AIActionHelpers,
-) => {
-  const { integration_id } = parseArgs<{ integration_id: string }>(data)
-
-  const confirmed = await helpers.confirm({
-    title: `Reconnect ${integration_id}?`,
-    description: 'This will re-authenticate and refresh the token for this integration.',
-    acceptLabel: 'Reconnect',
-    rejectLabel: 'Cancel',
-  })
-
-  if (!confirmed) {
-    helpers.respond('Reconnection cancelled.')
-    return
-  }
-
-  // TODO: call your integration reconnect API here
-  helpers.respond(
-    `Reconnecting ${integration_id}… The token has been refreshed. It may take a few seconds to sync.`,
-  )
+const getIntegrationStatus: AIActionHandler = (data: AIActionData, helpers: AIActionHelpers) => {
+  const { integration_id } = parseArgs<{ integration_id?: string }>(data)
+  helpers.respond(`Status check for ${integration_id ?? 'all integrations'} — handled by component-registered action.`)
 }
 
-/**
- * Return the current status of an integration.
- * Expected args: { integration_id: string }
- */
-const getIntegrationStatus: AIActionHandler = (
-  data: AIActionData,
-  helpers: AIActionHelpers,
-) => {
+const diagnoseIntegration: AIActionHandler = (data: AIActionData, helpers: AIActionHelpers) => {
   const { integration_id } = parseArgs<{ integration_id: string }>(data)
+  helpers.respond(`Diagnosis stub for "${integration_id}" — handled by component-registered action.`)
+}
 
-  // TODO: look up real integration state from your store
-  helpers.respond(
-    `The current status of ${integration_id} has been fetched and shared above.`,
-  )
+const fixIntegration: AIActionHandler = (data: AIActionData, helpers: AIActionHelpers) => {
+  const { integration_id } = parseArgs<{ integration_id: string }>(data)
+  helpers.respond(`Fix stub for "${integration_id}" — handled by component-registered action.`)
+}
+
+const verifyIntegration: AIActionHandler = (data: AIActionData, helpers: AIActionHelpers) => {
+  const { integration_id } = parseArgs<{ integration_id: string }>(data)
+  helpers.respond(`Verify stub for "${integration_id}" — handled by component-registered action.`)
 }
 
 export const saasHandlers: Record<string, AIActionHandler> = {
-  reconnect_integration: reconnectIntegration,
   get_integration_status: getIntegrationStatus,
+  diagnose_integration:   diagnoseIntegration,
+  fix_integration:        fixIntegration,
+  verify_integration:     verifyIntegration,
 }
 
 // ---------------------------------------------------------------------------
 // E-commerce — Help Me Decide & Finish
 // ---------------------------------------------------------------------------
+// All handlers share a set of internal logic functions so they can chain
+// into one another without duplicating code. Each handler uses
+// helpers.confirm() at key decision points to keep the user in the loop.
+// ---------------------------------------------------------------------------
 
-/**
- * Add a product to the cart.
- * Expected args: { product_id: string; quantity?: number }
- */
-const addToCart: AIActionHandler = async (
-  data: AIActionData,
-  helpers: AIActionHelpers,
-) => {
-  const { product_id, quantity = 1 } = parseArgs<{
-    product_id: string
-    quantity?: number
-  }>(data)
+// Known coupon codes and their discounts (percent)
+const COUPONS: Record<string, number> = {
+  SAVE10:  10,
+  TECH20:  20,
+  FIRST15: 15,
+}
 
-  const confirmed = await helpers.confirm({
-    title: 'Add to cart?',
-    description: `Add ${quantity}× ${product_id} to your cart?`,
-    acceptLabel: 'Add',
-    rejectLabel: 'Cancel',
-  })
+// ── Shared internal logic ────────────────────────────────────────────────────
 
-  if (!confirmed) {
-    helpers.respond('No problem — nothing was added to your cart.')
-    return
-  }
-
-  // TODO: call your cart API here
-  helpers.respond(`Added ${quantity}× ${product_id} to your cart!`)
+/** Look up a product's stock status by id. Returns null if not found. */
+function checkStockLogic(productId: string): { product: Product; stock: StockStatus } | null {
+  const product = allProducts.find((p) => p.id === productId)
+  if (!product) return null
+  return { product, stock: product.stock }
 }
 
 /**
- * Apply a coupon / discount code to the current order.
- * Expected args: { code: string }
+ * Run the full comparison overlay for a category and return the top-rated
+ * available product (or null if none are in stock).
  */
-const applyCoupon: AIActionHandler = (
-  data: AIActionData,
+async function compareProductsLogic(
+  category: string,
   helpers: AIActionHelpers,
-) => {
-  const { code } = parseArgs<{ code: string }>(data)
-
-  // TODO: validate and apply coupon via your API
-  helpers.respond(`Coupon "${code}" applied! Your discount has been reflected in the cart.`)
-}
-
-/**
- * Compare products in a category and recommend the best one.
- * Uses page-aware data (products array) to build a live comparison.
- * Expected args: { category?: string }  — defaults to 'Headphones'
- */
-const compareProducts: AIActionHandler = async (
-  data: AIActionData,
-  helpers: AIActionHelpers,
-) => {
-  const { category = 'Headphones' } = parseArgs<{ category?: string }>(data)
-
+): Promise<Product | null> {
   const items = allProducts.filter((p) => p.category === category)
-
   if (items.length === 0) {
     helpers.respond(`No products found for category "${category}".`)
-    return
+    return null
   }
 
-  // Close widget so the full-page overlay animation is unobstructed
   YourGPT.getInstance()?.close()
 
-  // Notify the page UI to show the scanning overlay
   window.dispatchEvent(new CustomEvent('ygpt:compare', {
     detail: { products: items, phase: 'start' },
   }))
 
-  // Simulate AI analysis time
   await new Promise<void>((r) => setTimeout(r, 4500))
 
-  // Build comparison response
   const available = [...items]
     .filter((p) => p.stock !== 'out_of_stock')
     .sort((a, b) => b.rating - a.rating)
-  const top = available[0]
+  const top = available[0] ?? null
 
   const lines: string[] = [
     `Here's my comparison of the **${items.length} ${category}** currently in the store:\n`,
   ]
-
   for (const p of items) {
     const discountNote = p.originalPrice
       ? ` — ~~$${p.originalPrice}~~ **${Math.round((1 - p.price / p.originalPrice) * 100)}% off**`
       : ''
     const stockNote =
       p.stock === 'out_of_stock' ? ' *(out of stock)*'
-      : p.stock === 'low_stock' ? ' *(low stock — hurry!)*'
+      : p.stock === 'low_stock'  ? ' *(low stock — hurry!)*'
       : ''
     lines.push(
       `**${p.name}** by ${p.brand} — **$${p.price}**${discountNote}${stockNote}\n` +
-      `⭐ ${p.rating}/5 · ${p.description.split('.')[0]}.`
+      `⭐ ${p.rating}/5 · ${p.description.split('.')[0]}.`,
     )
   }
-
   if (top) {
     const savingsNote = top.originalPrice
       ? `, currently **${Math.round((1 - top.price / top.originalPrice) * 100)}% off** (was $${top.originalPrice})`
@@ -196,25 +145,521 @@ const compareProducts: AIActionHandler = async (
     lines.push(
       `\n✅ **My recommendation: ${top.name}**\n` +
       `Best overall rating (${top.rating}/5) at **$${top.price}**${savingsNote}. ` +
-      `${available.length < items.length ? 'Some options are currently out of stock.' : 'All options are available to order now.'}`
+      `${available.length < items.length ? 'Some options are currently out of stock.' : 'All options are available to order now.'}`,
     )
   }
 
   helpers.respond(lines.join('\n\n'))
 
-  // Signal overlay to transition to done state
   window.dispatchEvent(new CustomEvent('ygpt:compare', {
     detail: { products: items, phase: 'done' },
   }))
 
-  // Reopen widget so user sees the recommendation
   YourGPT.getInstance()?.open()
+  return top
+}
+
+/** Find the best applicable coupon for a product. Returns null if none apply. */
+function applyBestCouponLogic(product: Product): { code: string; discount: number; savings: number } | null {
+  const best = Object.entries(COUPONS).sort((a, b) => b[1] - a[1])[0]
+  if (!best) return null
+  const savings = Math.round(product.price * (best[1] / 100) * 100) / 100
+  return { code: best[0], discount: best[1], savings }
+}
+
+/** Filter and rank products — used by get_recommendations and find_best_deal. */
+function getRecommendationsLogic(category: string, maxPrice?: number): Product[] {
+  return allProducts
+    .filter((p) => p.category === category && p.stock !== 'out_of_stock')
+    .filter((p) => maxPrice === undefined || p.price <= maxPrice)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 3)
+}
+
+/**
+ * Core add-to-cart logic reused by multiple handlers.
+ * Dispatches ygpt:cart events and handles the final confirm gate.
+ */
+async function smartAddToCartLogic(
+  productId: string,
+  quantity: number,
+  helpers: AIActionHelpers,
+): Promise<boolean> {
+  const result = checkStockLogic(productId)
+
+  if (!result) {
+    helpers.respond(`I couldn't find that product. Please check the product ID.`)
+    return false
+  }
+
+  const { product, stock } = result
+
+  // Step 1 — announce stock check
+  window.dispatchEvent(new CustomEvent('ygpt:cart', {
+    detail: { phase: 'checking', productName: product.name },
+  }))
+  await new Promise<void>((r) => setTimeout(r, 800))
+
+  // Step 2 — handle stock states
+  if (stock === 'out_of_stock') {
+    window.dispatchEvent(new CustomEvent('ygpt:cart', {
+      detail: { phase: 'out_of_stock', productName: product.name },
+    }))
+    const findAlt = await helpers.confirm({
+      title: `${product.name} is out of stock`,
+      description: `This item isn't available right now. Want me to find the best alternative in ${product.category}?`,
+      acceptLabel: 'Find alternatives',
+      rejectLabel: 'Never mind',
+    })
+    if (findAlt) {
+      YourGPT.getInstance()?.open()
+      const alt = await compareProductsLogic(product.category, helpers)
+      if (alt) {
+        const addAlt = await helpers.confirm({
+          title: `Add ${alt.name}?`,
+          description: `Top-rated alternative at $${alt.price}. Add ${quantity}× to your cart?`,
+          acceptLabel: 'Add to cart',
+          rejectLabel: 'Skip',
+        })
+        if (addAlt) {
+          window.dispatchEvent(new CustomEvent('ygpt:cart', {
+            detail: { phase: 'adding', productName: alt.name },
+          }))
+          await new Promise<void>((r) => setTimeout(r, 700))
+          window.dispatchEvent(new CustomEvent('ygpt:cart', {
+            detail: { phase: 'done', productName: alt.name },
+          }))
+          helpers.respond(`Done! Added ${quantity}× **${alt.name}** to your cart.`)
+          return true
+        }
+      }
+    } else {
+      window.dispatchEvent(new CustomEvent('ygpt:cart', {
+        detail: { phase: 'failed', productName: product.name },
+      }))
+      helpers.respond(`No worries — nothing was added to your cart.`)
+    }
+    return false
+  }
+
+  if (stock === 'low_stock') {
+    const proceed = await helpers.confirm({
+      title: 'Low stock warning',
+      description: `Only a few **${product.name}** units are left. Reserve one now?`,
+      acceptLabel: 'Yes, add it',
+      rejectLabel: 'Skip',
+    })
+    if (!proceed) {
+      helpers.respond(`No problem — I'll leave it for now.`)
+      return false
+    }
+  }
+
+  // Step 3 — final confirm gate
+  window.dispatchEvent(new CustomEvent('ygpt:cart', {
+    detail: { phase: 'adding', productName: product.name },
+  }))
+  const confirmed = await helpers.confirm({
+    title: 'Add to cart?',
+    description: `Add ${quantity}× **${product.name}** at $${product.price} each?`,
+    acceptLabel: 'Add',
+    rejectLabel: 'Cancel',
+  })
+
+  if (!confirmed) {
+    window.dispatchEvent(new CustomEvent('ygpt:cart', {
+      detail: { phase: 'cancelled', productName: product.name },
+    }))
+    helpers.respond(`Cancelled — nothing was added to your cart.`)
+    return false
+  }
+
+  await new Promise<void>((r) => setTimeout(r, 600))
+  window.dispatchEvent(new CustomEvent('ygpt:cart', {
+    detail: { phase: 'done', productName: product.name },
+  }))
+  helpers.respond(`Added ${quantity}× **${product.name}** to your cart! 🛒`)
+  return true
+}
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Check stock status for a product and report back.
+ * If low stock, asks the user whether to reserve one.
+ * Expected args: { product_id: string }
+ */
+const checkStock: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { product_id } = parseArgs<{ product_id: string }>(data)
+  const result = checkStockLogic(product_id)
+
+  if (!result) {
+    helpers.respond(`Product "${product_id}" was not found in the store.`)
+    return
+  }
+
+  const { product, stock } = result
+
+  window.dispatchEvent(new CustomEvent('ygpt:cart', {
+    detail: { phase: 'checking', productName: product.name },
+  }))
+  await new Promise<void>((r) => setTimeout(r, 700))
+
+  if (stock === 'in_stock') {
+    helpers.respond(`✅ **${product.name}** is in stock at $${product.price}. Ready to add it?`)
+  } else if (stock === 'low_stock') {
+    const reserve = await helpers.confirm({
+      title: 'Low stock!',
+      description: `Only a few **${product.name}** units remain at $${product.price}. Reserve one now before it sells out?`,
+      acceptLabel: 'Add to cart',
+      rejectLabel: 'Not yet',
+    })
+    if (reserve) {
+      await smartAddToCartLogic(product_id, 1, helpers)
+    } else {
+      helpers.respond(`Got it — I'll hold off. Let me know if you change your mind!`)
+    }
+  } else {
+    helpers.respond(`❌ **${product.name}** is currently out of stock. Want me to find an alternative?`)
+  }
+}
+
+/**
+ * Add a product to the cart with full stock-checking and user confirmation.
+ * Chains into compare_products if the item is out of stock.
+ * Expected args: { product_id: string; quantity?: number }
+ */
+const smartAddToCart: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { product_id, quantity = 1 } = parseArgs<{
+    product_id: string
+    quantity?: number
+  }>(data)
+  await smartAddToCartLogic(product_id, quantity, helpers)
+}
+
+/**
+ * Compare all products in a category and recommend the best one.
+ * After the comparison, asks the user if they'd like to add the top pick.
+ * Expected args: { category?: string }
+ */
+const compareProducts: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { category = 'Headphones' } = parseArgs<{ category?: string }>(data)
+  const top = await compareProductsLogic(category, helpers)
+
+  if (top) {
+    YourGPT.getInstance()?.open()
+    const addTop = await helpers.confirm({
+      title: `Add top pick to cart?`,
+      description: `**${top.name}** is the highest-rated available option at $${top.price}. Want to add it?`,
+      acceptLabel: 'Add to cart',
+      rejectLabel: 'Just browsing',
+    })
+    if (addTop) {
+      await smartAddToCartLogic(top.id, 1, helpers)
+    }
+  }
+}
+
+/**
+ * Validate and apply a coupon code. If invalid, offers to try a known good code.
+ * Expected args: { code: string }
+ */
+const applyCoupon: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { code } = parseArgs<{ code: string }>(data)
+  const upperCode = code.toUpperCase()
+  const discount = COUPONS[upperCode]
+
+  if (!discount) {
+    window.dispatchEvent(new CustomEvent('ygpt:cart', {
+      detail: { phase: 'coupon_failed', couponCode: code },
+    }))
+    const tryDefault = await helpers.confirm({
+      title: `"${code}" isn't valid`,
+      description: `That coupon code wasn't recognised. Want to try **SAVE10** for 10% off instead?`,
+      acceptLabel: 'Use SAVE10',
+      rejectLabel: 'Skip discount',
+    })
+    if (tryDefault) {
+      window.dispatchEvent(new CustomEvent('ygpt:cart', {
+        detail: { phase: 'coupon_applied', couponCode: 'SAVE10', savings: null },
+      }))
+      helpers.respond(`Coupon **SAVE10** applied — you'll save 10% on your order! 🎉`)
+    } else {
+      helpers.respond(`No coupon applied. Your order total stays the same.`)
+    }
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent('ygpt:cart', {
+    detail: { phase: 'coupon_applied', couponCode: upperCode, discount },
+  }))
+  helpers.respond(`Coupon **${upperCode}** applied — ${discount}% off your order! 🎉`)
+}
+
+/**
+ * Full shopping assistant: compare products → apply best coupon → add to cart.
+ * Chains compareProductsLogic → applyBestCouponLogic → smartAddToCartLogic.
+ * Expected args: { category?: string }
+ */
+const findBestDeal: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { category = 'Headphones' } = parseArgs<{ category?: string }>(data)
+
+  // Step 1 — compare
+  const top = await compareProductsLogic(category, helpers)
+  if (!top) return
+
+  YourGPT.getInstance()?.open()
+
+  // Step 2 — offer best coupon
+  const coupon = applyBestCouponLogic(top)
+  if (coupon) {
+    const applyCouponConfirm = await helpers.confirm({
+      title: 'Apply coupon?',
+      description: `I found code **${coupon.code}** — saves you **${coupon.discount}%** ($${coupon.savings}) on **${top.name}**. Apply it?`,
+      acceptLabel: 'Apply',
+      rejectLabel: 'Skip',
+    })
+    if (applyCouponConfirm) {
+      window.dispatchEvent(new CustomEvent('ygpt:cart', {
+        detail: { phase: 'coupon_applied', couponCode: coupon.code, discount: coupon.discount },
+      }))
+      helpers.respond(`Coupon **${coupon.code}** locked in — $${coupon.savings} off your total.`)
+    }
+  }
+
+  // Step 3 — offer to add
+  const addIt = await helpers.confirm({
+    title: `Add ${top.name} to cart?`,
+    description: `Want me to add the top pick${coupon ? ` at the discounted price` : ''} to your cart now?`,
+    acceptLabel: 'Add to cart',
+    rejectLabel: 'Not now',
+  })
+  if (addIt) {
+    await smartAddToCartLogic(top.id, 1, helpers)
+  }
+}
+
+/**
+ * Recommend top products in a category with an optional price ceiling.
+ * After listing them, asks the user if they want the top pick added to cart.
+ * Expected args: { category?: string; max_price?: number }
+ */
+const getRecommendations: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { category = 'Headphones', max_price } = parseArgs<{
+    category?: string
+    max_price?: number
+  }>(data)
+
+  const picks = getRecommendationsLogic(category, max_price)
+
+  if (picks.length === 0) {
+    helpers.respond(
+      max_price
+        ? `No ${category} found under $${max_price} that are currently in stock.`
+        : `No ${category} are currently in stock.`,
+    )
+    return
+  }
+
+  const header = max_price
+    ? `Here are the top ${picks.length} **${category}** under **$${max_price}**:\n`
+    : `Here are my top **${category}** picks:\n`
+
+  const lines = picks.map((p, i) => {
+    const discountNote = p.originalPrice
+      ? ` ~~$${p.originalPrice}~~ → **$${p.price}**`
+      : ` **$${p.price}**`
+    const stockNote = p.stock === 'low_stock' ? ' *(low stock)*' : ''
+    return `${i + 1}. **${p.name}** by ${p.brand}${discountNote}${stockNote} — ⭐ ${p.rating}/5`
+  })
+
+  helpers.respond([header, ...lines].join('\n'))
+
+  // Offer to add the top pick
+  const top = picks[0]
+  const addTop = await helpers.confirm({
+    title: 'Add top recommendation?',
+    description: `Want me to add **${top.name}** ($${top.price}) to your cart?`,
+    acceptLabel: 'Add to cart',
+    rejectLabel: 'Just looking',
+  })
+  if (addTop) {
+    await smartAddToCartLogic(top.id, 1, helpers)
+  }
+}
+
+/**
+ * Alert the user to an active price drop on a specific product.
+ * Checks stock first, then offers to add at the discounted price.
+ * Expected args: { product_id: string }
+ */
+const priceDropAlert: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { product_id } = parseArgs<{ product_id: string }>(data)
+  const result = checkStockLogic(product_id)
+
+  if (!result) {
+    helpers.respond(`Product not found.`)
+    return
+  }
+
+  const { product } = result
+
+  if (!product.originalPrice || product.price >= product.originalPrice) {
+    helpers.respond(`**${product.name}** is currently at its regular price of $${product.price} — no active sale.`)
+    return
+  }
+
+  const pct = Math.round((1 - product.price / product.originalPrice) * 100)
+  const savings = (product.originalPrice - product.price).toFixed(2)
+
+  const grab = await helpers.confirm({
+    title: `${pct}% off — limited time!`,
+    description: `**${product.name}** dropped from $${product.originalPrice} to **$${product.price}** — save $${savings} right now. Add it to your cart?`,
+    acceptLabel: 'Grab the deal',
+    rejectLabel: 'Pass',
+  })
+
+  if (grab) {
+    // checkStockLogic already called — pass straight to smartAddToCartLogic
+    await smartAddToCartLogic(product.id, 1, helpers)
+  } else {
+    helpers.respond(`No problem — the deal is still live if you change your mind!`)
+  }
+}
+
+/**
+ * Orchestrate a full checkout: apply the best coupon across the cart,
+ * confirm savings, then confirm the final order.
+ * Expected args: { product_ids?: string[] }
+ */
+const checkoutAssist: AIActionHandler = async (
+  data: AIActionData,
+  helpers: AIActionHelpers,
+) => {
+  const { product_ids = [] } = parseArgs<{ product_ids?: string[] }>(data)
+
+  const cartProducts = product_ids
+    .map((id) => checkStockLogic(id)?.product)
+    .filter(Boolean) as Product[]
+
+  if (cartProducts.length === 0) {
+    helpers.respond(`Your cart appears to be empty. Add some products first!`)
+    return
+  }
+
+  // Step 1 — kick things off
+  const proceed = await helpers.confirm({
+    title: 'Ready to checkout?',
+    description: `You have ${cartProducts.length} item${cartProducts.length > 1 ? 's' : ''} in your cart. Want me to find the best coupon before you pay?`,
+    acceptLabel: 'Yes, find a coupon',
+    rejectLabel: 'Skip — checkout now',
+  })
+
+  // Step 2 — apply coupon
+  let totalSavings = 0
+  let appliedCode = ''
+
+  if (proceed) {
+    const highestPriced = [...cartProducts].sort((a, b) => b.price - a.price)[0]
+    const coupon = applyBestCouponLogic(highestPriced)
+
+    if (coupon) {
+      window.dispatchEvent(new CustomEvent('ygpt:cart', {
+        detail: { phase: 'applying_coupon', couponCode: coupon.code },
+      }))
+      await new Promise<void>((r) => setTimeout(r, 700))
+
+      const confirmCoupon = await helpers.confirm({
+        title: 'Coupon found!',
+        description: `**${coupon.code}** saves you **${coupon.discount}%** ($${coupon.savings}) on your largest item. Apply it?`,
+        acceptLabel: 'Apply & save',
+        rejectLabel: 'Skip coupon',
+      })
+
+      if (confirmCoupon) {
+        totalSavings = coupon.savings
+        appliedCode = coupon.code
+        window.dispatchEvent(new CustomEvent('ygpt:cart', {
+          detail: { phase: 'coupon_applied', couponCode: coupon.code, discount: coupon.discount },
+        }))
+      }
+    } else {
+      helpers.respond(`No coupons found for your cart items, but let's proceed!`)
+    }
+  }
+
+  // Step 3 — final confirm
+  const orderTotal = cartProducts.reduce((sum, p) => sum + p.price, 0)
+  const finalTotal = (orderTotal - totalSavings).toFixed(2)
+
+  const confirm = await helpers.confirm({
+    title: 'Confirm your order',
+    description: `${cartProducts.length} item${cartProducts.length > 1 ? 's' : ''}${appliedCode ? ` · Coupon **${appliedCode}** applied` : ''} · **Total: $${finalTotal}**${totalSavings > 0 ? ` (you saved $${totalSavings})` : ''}. Place the order?`,
+    acceptLabel: 'Place order',
+    rejectLabel: 'Go back',
+  })
+
+  if (confirm) {
+    window.dispatchEvent(new CustomEvent('ygpt:cart', {
+      detail: { phase: 'done', productName: 'order' },
+    }))
+    helpers.respond(
+      `🎉 Order placed!\n\n` +
+      cartProducts.map((p) => `- **${p.name}** — $${p.price}`).join('\n') +
+      (totalSavings > 0 ? `\n\n**Coupon ${appliedCode}**: −$${totalSavings}` : '') +
+      `\n\n**Total charged: $${finalTotal}**`,
+    )
+  } else {
+    const skipCouponCheckout = totalSavings > 0
+      ? await helpers.confirm({
+          title: 'Checkout without coupon?',
+          description: `You'll pay the full $${orderTotal.toFixed(2)} without the ${appliedCode} discount. Continue?`,
+          acceptLabel: 'Checkout at full price',
+          rejectLabel: 'Keep browsing',
+        })
+      : false
+
+    if (skipCouponCheckout) {
+      window.dispatchEvent(new CustomEvent('ygpt:cart', {
+        detail: { phase: 'done', productName: 'order' },
+      }))
+      helpers.respond(`Order placed at full price — $${orderTotal.toFixed(2)}. Thanks for shopping!`)
+    } else {
+      helpers.respond(`No problem — your cart is saved. Come back when you're ready!`)
+    }
+  }
 }
 
 export const ecommerceHandlers: Record<string, AIActionHandler> = {
-  add_to_cart: addToCart,
-  apply_coupon: applyCoupon,
-  compare_products: compareProducts,
+  check_stock:         checkStock,
+  smart_add_to_cart:   smartAddToCart,
+  compare_products:    compareProducts,
+  apply_coupon:        applyCoupon,
+  find_best_deal:      findBestDeal,
+  get_recommendations: getRecommendations,
+  price_drop_alert:    priceDropAlert,
+  checkout_assist:     checkoutAssist,
 }
 
 // ---------------------------------------------------------------------------

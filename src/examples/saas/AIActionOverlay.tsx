@@ -12,6 +12,9 @@ interface AIActionOverlayProps {
   steps: AIStep[]
   token?: string
   phase: 'running' | 'done'
+  runningSubtitle?: string
+  doneTitle?: string
+  doneSubtitle?: string
 }
 
 // Typewriter hook — reveals text char-by-char
@@ -109,7 +112,7 @@ function StepRow({ step, token }: { step: AIStep; token?: string }) {
   )
 }
 
-export default function AIActionOverlay({ steps, token, phase }: AIActionOverlayProps) {
+export default function AIActionOverlay({ steps, token, phase, runningSubtitle, doneTitle, doneSubtitle }: AIActionOverlayProps) {
   const doneCount = steps.filter(s => s.status === 'done').length
   const progress = doneCount / steps.length
 
@@ -144,7 +147,7 @@ export default function AIActionOverlay({ steps, token, phase }: AIActionOverlay
               <div>
                 <p className="text-[11px] font-bold text-sky-400 uppercase tracking-widest">AI Agent</p>
                 <p className="text-xs text-slate-400 font-medium">
-                  {phase === 'done' ? 'Fix complete' : 'Diagnosing Slack integration…'}
+                  {phase === 'done' ? (doneTitle ?? 'Fix complete') : (runningSubtitle ?? 'Working…')}
                 </p>
               </div>
 
@@ -183,8 +186,8 @@ export default function AIActionOverlay({ steps, token, phase }: AIActionOverlay
                 </div>
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-emerald-400">Slack reconnected</p>
-                <p className="text-xs text-slate-500 mt-1">All systems healthy · New token applied</p>
+                <p className="text-sm font-bold text-emerald-400">{doneTitle ?? 'Fix complete'}</p>
+                <p className="text-xs text-slate-500 mt-1">{doneSubtitle ?? 'All systems healthy'}</p>
               </div>
             </div>
           )}

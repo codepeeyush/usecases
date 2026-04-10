@@ -20,6 +20,7 @@ export interface Integration {
   lastSynced: string | null
   botToken?: string
   webhookUrl?: string
+  webhookSecret?: string
   errorMessage?: string
   errorCode?: string
   scopes?: string[]
@@ -129,6 +130,144 @@ export const integrations: Integration[] = [
     lastSynced: null,
     scopes: [],
     logs: [],
+  },
+  {
+    id: 'hubspot',
+    name: 'HubSpot',
+    description: 'Sync contacts, deals, and CRM activity.',
+    status: 'failed',
+    icon: 'hubspot',
+    lastSynced: null,
+    scopes: ['contacts:read'],
+    errorMessage: 'Insufficient OAuth scopes — crm.contacts.write permission not granted.',
+    errorCode: '403 Forbidden',
+    failingSince: '45m',
+    blockedCount: 312,
+    logs: [
+      {
+        id: 'l1', time: '14:28:14', method: 'POST', endpoint: '/api/hubspot/contacts/sync', status: 403, duration: 201,
+        requestBody: 'POST /api/hubspot/contacts/sync\nAuthorization: Bearer pat-na1-••••••••••\nContent-Type: application/json\n\n{ "contacts": [{ "email": "lead@example.com", "firstname": "Alex" }] }',
+        responseBody: '{\n  "status": "error",\n  "message": "This app hasn\'t been granted all required scopes to make this call. Required scopes: crm.contacts.write.",\n  "correlationId": "3f8e2a1b-..."\n}',
+      },
+      {
+        id: 'l2', time: '14:24:50', method: 'POST', endpoint: '/api/hubspot/contacts/sync', status: 403, duration: 188,
+        requestBody: 'POST /api/hubspot/contacts/sync\nAuthorization: Bearer pat-na1-••••••••••\n\n{ "contacts": [{ "email": "prospect@acme.com" }] }',
+        responseBody: '{\n  "status": "error",\n  "message": "This app hasn\'t been granted all required scopes to make this call. Required scopes: crm.contacts.write.",\n  "correlationId": "9d4c7b2e-..."\n}',
+      },
+      {
+        id: 'l3', time: '14:19:02', method: 'GET', endpoint: '/api/hubspot/contacts', status: 200, duration: 143,
+        requestBody: 'GET /api/hubspot/contacts?limit=10\nAuthorization: Bearer pat-na1-••••••••••',
+        responseBody: '{\n  "total": 2418,\n  "results": [{ "id": "101", "properties": { "email": "lead@example.com" } }]\n}',
+      },
+    ],
+  },
+  {
+    id: 'salesforce',
+    name: 'Salesforce',
+    description: 'Sync leads, opportunities, and account data.',
+    status: 'failed',
+    icon: 'salesforce',
+    lastSynced: null,
+    scopes: ['api', 'refresh_token'],
+    errorMessage: 'Salesforce API limit reached — 15,000 of 15,000 daily calls consumed.',
+    errorCode: '429 Too Many Requests',
+    failingSince: '1h 2m',
+    blockedCount: 891,
+    logs: [
+      {
+        id: 'l1', time: '14:30:00', method: 'GET', endpoint: '/api/salesforce/limits', status: 200, duration: 91,
+        requestBody: 'GET /services/data/v59.0/limits\nAuthorization: Bearer 00D5g000••••••••••',
+        responseBody: '{\n  "DailyApiRequests": { "Max": 15000, "Remaining": 0 },\n  "DailyBulkV2QueryJobs": { "Max": 10000, "Remaining": 9874 }\n}',
+      },
+      {
+        id: 'l2', time: '14:30:01', method: 'GET', endpoint: '/api/salesforce/leads/sync', status: 429, duration: 56,
+        requestBody: 'GET /services/data/v59.0/query?q=SELECT+Id,Name+FROM+Lead\nAuthorization: Bearer 00D5g000••••••••••',
+        responseBody: '[\n  {\n    "message": "Request limit exceeded. Daily org API usage exceeded.",\n    "errorCode": "REQUEST_LIMIT_EXCEEDED"\n  }\n]',
+      },
+      {
+        id: 'l3', time: '13:28:44', method: 'POST', endpoint: '/api/salesforce/opportunities/upsert', status: 429, duration: 48,
+        requestBody: 'POST /services/data/v59.0/composite/batch\nAuthorization: Bearer 00D5g000••••••••••\n\n{ "batchRequests": [{ "method": "PATCH", "url": "/v59.0/sobjects/Opportunity/0065g00000••" }] }',
+        responseBody: '[\n  {\n    "message": "Request limit exceeded.",\n    "errorCode": "REQUEST_LIMIT_EXCEEDED"\n  }\n]',
+      },
+    ],
+  },
+  {
+    id: 'intercom',
+    name: 'Intercom',
+    description: 'Route support conversations and sync user events.',
+    status: 'failed',
+    icon: 'intercom',
+    lastSynced: null,
+    webhookUrl: 'https://nexus.app/webhooks/intercom',
+    webhookSecret: 'whsec_stale_a3f9d2••••••••••',
+    scopes: ['read_admins', 'write_conversations'],
+    errorMessage: 'Webhook signature validation failed — HMAC mismatch. Secret may have been rotated.',
+    errorCode: '400 Bad Request',
+    failingSince: '3d 7h',
+    blockedCount: 2140,
+    logs: [
+      {
+        id: 'l1', time: '14:31:55', method: 'POST', endpoint: '/webhooks/intercom', status: 400, duration: 12,
+        requestBody: 'POST /webhooks/intercom\nX-Hub-Signature: sha1=a1b2c3d4e5f6••••••••••\nContent-Type: application/json\n\n{ "type": "conversation.user.created", "data": { "item": { "id": "conv_001" } } }',
+        responseBody: '{\n  "type": "error.list",\n  "errors": [{ "code": "unauthorized", "message": "Invalid signature. Ensure the secret matches the one configured in Intercom." }]\n}',
+      },
+      {
+        id: 'l2', time: '14:29:10', method: 'POST', endpoint: '/webhooks/intercom', status: 400, duration: 11,
+        requestBody: 'POST /webhooks/intercom\nX-Hub-Signature: sha1=f7e8d9c0b1a2••••••••••\nContent-Type: application/json\n\n{ "type": "conversation.admin.replied", "data": { "item": { "id": "conv_002" } } }',
+        responseBody: '{\n  "type": "error.list",\n  "errors": [{ "code": "unauthorized", "message": "Invalid signature. Ensure the secret matches the one configured in Intercom." }]\n}',
+      },
+      {
+        id: 'l3', time: '14:26:33', method: 'POST', endpoint: '/webhooks/intercom', status: 400, duration: 10,
+        requestBody: 'POST /webhooks/intercom\nX-Hub-Signature: sha1=2c3d4e5f6a7b••••••••••\nContent-Type: application/json\n\n{ "type": "user.created", "data": { "item": { "id": "usr_409" } } }',
+        responseBody: '{\n  "type": "error.list",\n  "errors": [{ "code": "unauthorized", "message": "Invalid signature." }]\n}',
+      },
+    ],
+  },
+  {
+    id: 'jira',
+    name: 'Jira',
+    description: 'Link issues and sprints to CRM deals and contacts.',
+    status: 'connected',
+    icon: 'jira',
+    lastSynced: '8 minutes ago',
+    scopes: ['read:jira-work', 'write:jira-work'],
+    eventCount: 567,
+    lastEvent: '8m ago',
+    logs: [
+      {
+        id: 'l1', time: '14:24:00', method: 'GET', endpoint: '/api/jira/issues', status: 200, duration: 274,
+        requestBody: 'GET /rest/api/3/search?jql=project=NEXUS+AND+updated>=-1w\nAuthorization: Basic ••••••••••',
+        responseBody: '{\n  "total": 42,\n  "issues": [{ "key": "NEXUS-88", "fields": { "summary": "Onboarding flow v2" } }]\n}',
+      },
+      {
+        id: 'l2', time: '14:22:15', method: 'PUT', endpoint: '/api/jira/issues/NEXUS-87', status: 200, duration: 198,
+        requestBody: 'PUT /rest/api/3/issue/NEXUS-87\nAuthorization: Basic ••••••••••\n\n{ "fields": { "status": { "name": "Done" } } }',
+        responseBody: '{}',
+      },
+    ],
+  },
+  {
+    id: 'sendgrid',
+    name: 'SendGrid',
+    description: 'Deliver transactional and marketing emails.',
+    status: 'connected',
+    icon: 'sendgrid',
+    lastSynced: '1 minute ago',
+    scopes: ['mail.send', 'stats.read'],
+    eventCount: 8924,
+    lastEvent: '1m ago',
+    logs: [
+      {
+        id: 'l1', time: '14:32:44', method: 'POST', endpoint: '/api/sendgrid/mail/send', status: 202, duration: 311,
+        requestBody: 'POST /v3/mail/send\nAuthorization: Bearer SG.••••••••••\n\n{ "to": [{ "email": "user@example.com" }], "subject": "Your invoice is ready", "template_id": "d-abc123" }',
+        responseBody: '(empty — 202 Accepted)',
+      },
+      {
+        id: 'l2', time: '14:31:02', method: 'GET', endpoint: '/api/sendgrid/stats', status: 200, duration: 155,
+        requestBody: 'GET /v3/stats?start_date=2024-01-01\nAuthorization: Bearer SG.••••••••••',
+        responseBody: '[\n  { "date": "2024-01-10", "stats": [{ "metrics": { "delivered": 412, "opens": 198, "bounces": 3 } }] }\n]',
+      },
+    ],
   },
 ]
 
