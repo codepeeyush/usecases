@@ -245,7 +245,7 @@ async function smartAddToCartLogic(
   if (stock === 'low_stock') {
     const proceed = await helpers.confirm({
       title: 'Low stock warning',
-      description: `Only a few **${product.name}** units are left. Reserve one now?`,
+      description: `Only a few ${product.name} units are left. Reserve one now?`,
       acceptLabel: 'Yes, add it',
       rejectLabel: 'Skip',
     })
@@ -261,7 +261,7 @@ async function smartAddToCartLogic(
   }))
   const confirmed = await helpers.confirm({
     title: 'Add to cart?',
-    description: `Add ${quantity}× **${product.name}** at $${product.price} each?`,
+    description: `Add ${quantity}× ${product.name} at $${product.price} each?`,
     acceptLabel: 'Add',
     rejectLabel: 'Cancel',
   })
@@ -313,7 +313,7 @@ const checkStock: AIActionHandler = async (
   } else if (stock === 'low_stock') {
     const reserve = await helpers.confirm({
       title: 'Low stock!',
-      description: `Only a few **${product.name}** units remain at $${product.price}. Reserve one now before it sells out?`,
+      description: `Only a few ${product.name} units remain at $${product.price}. Reserve one now before it sells out?`,
       acceptLabel: 'Add to cart',
       rejectLabel: 'Not yet',
     })
@@ -359,7 +359,7 @@ const compareProducts: AIActionHandler = async (
     YourGPT.getInstance()?.open()
     const addTop = await helpers.confirm({
       title: `Add top pick to cart?`,
-      description: `**${top.name}** is the highest-rated available option at $${top.price}. Want to add it?`,
+      description: `${top.name} is the highest-rated available option at $${top.price}. Want to add it?`,
       acceptLabel: 'Add to cart',
       rejectLabel: 'Just browsing',
     })
@@ -387,7 +387,7 @@ const applyCoupon: AIActionHandler = async (
     }))
     const tryDefault = await helpers.confirm({
       title: `"${code}" isn't valid`,
-      description: `That coupon code wasn't recognised. Want to try **SAVE10** for 10% off instead?`,
+      description: `That coupon code wasn't recognised. Want to try SAVE10 for 10% off instead?`,
       acceptLabel: 'Use SAVE10',
       rejectLabel: 'Skip discount',
     })
@@ -430,7 +430,7 @@ const findBestDeal: AIActionHandler = async (
   if (coupon) {
     const applyCouponConfirm = await helpers.confirm({
       title: 'Apply coupon?',
-      description: `I found code **${coupon.code}** — saves you **${coupon.discount}%** ($${coupon.savings}) on **${top.name}**. Apply it?`,
+      description: `I found code ${coupon.code} — saves you ${coupon.discount}% ($${coupon.savings}) on ${top.name}. Apply it?`,
       acceptLabel: 'Apply',
       rejectLabel: 'Skip',
     })
@@ -497,7 +497,7 @@ const getRecommendations: AIActionHandler = async (
   const top = picks[0]
   const addTop = await helpers.confirm({
     title: 'Add top recommendation?',
-    description: `Want me to add **${top.name}** ($${top.price}) to your cart?`,
+    description: `Want me to add ${top.name} ($${top.price}) to your cart?`,
     acceptLabel: 'Add to cart',
     rejectLabel: 'Just looking',
   })
@@ -535,7 +535,7 @@ const priceDropAlert: AIActionHandler = async (
 
   const grab = await helpers.confirm({
     title: `${pct}% off — limited time!`,
-    description: `**${product.name}** dropped from $${product.originalPrice} to **$${product.price}** — save $${savings} right now. Add it to your cart?`,
+    description: `${product.name} dropped from $${product.originalPrice} to $${product.price} — save $${savings} right now. Add it to your cart?`,
     acceptLabel: 'Grab the deal',
     rejectLabel: 'Pass',
   })
@@ -592,7 +592,7 @@ const checkoutAssist: AIActionHandler = async (
 
       const confirmCoupon = await helpers.confirm({
         title: 'Coupon found!',
-        description: `**${coupon.code}** saves you **${coupon.discount}%** ($${coupon.savings}) on your largest item. Apply it?`,
+        description: `${coupon.code} saves you ${coupon.discount}% ($${coupon.savings}) on your largest item. Apply it?`,
         acceptLabel: 'Apply & save',
         rejectLabel: 'Skip coupon',
       })
@@ -615,7 +615,7 @@ const checkoutAssist: AIActionHandler = async (
 
   const confirm = await helpers.confirm({
     title: 'Confirm your order',
-    description: `${cartProducts.length} item${cartProducts.length > 1 ? 's' : ''}${appliedCode ? ` · Coupon **${appliedCode}** applied` : ''} · **Total: $${finalTotal}**${totalSavings > 0 ? ` (you saved $${totalSavings})` : ''}. Place the order?`,
+    description: `${cartProducts.length} item${cartProducts.length > 1 ? 's' : ''}${appliedCode ? ` · Coupon ${appliedCode} applied` : ''} · Total: $${finalTotal}${totalSavings > 0 ? ` (you saved $${totalSavings})` : ''}. Place the order?`,
     acceptLabel: 'Place order',
     rejectLabel: 'Go back',
   })
