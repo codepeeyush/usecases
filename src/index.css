@@ -84,6 +84,27 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+.healthcare {
+  --background: oklch(0.980 0.008 220);
+  --foreground: oklch(0.178 0.045 240);
+  --card: oklch(0.990 0.005 220);
+  --card-foreground: oklch(0.178 0.045 240);
+  --popover: oklch(0.990 0.005 220);
+  --popover-foreground: oklch(0.178 0.045 240);
+  --primary: oklch(0.445 0.082 192);
+  --primary-foreground: oklch(0.980 0.008 220);
+  --secondary: oklch(0.928 0.018 220);
+  --secondary-foreground: oklch(0.178 0.045 240);
+  --muted: oklch(0.928 0.018 220);
+  --muted-foreground: oklch(0.48 0.025 230);
+  --accent: oklch(0.618 0.095 155);
+  --accent-foreground: oklch(0.980 0.008 220);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.88 0.015 220);
+  --input: oklch(0.88 0.015 220);
+  --ring: oklch(0.445 0.082 192);
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
