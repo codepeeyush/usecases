@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="favicon-gradient" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1F8DA4" />
+      <stop offset="0.58" stop-color="#2F6E4E" />
+      <stop offset="1" stop-color="#A66C33" />
+    </linearGradient>
+    <radialGradient id="favicon-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 16) rotate(49.0861) scale(24.7442 22.7566)">
+      <stop stop-color="#FFFFFF" stop-opacity="0.28" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#favicon-gradient)" />
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#favicon-glow)" />
+  <path
+    d="M13.5 45.5L27.45 25.21C28.76 23.3 31.59 23.28 32.93 25.18L37.88 32.17L43.9 23.33C45.25 21.35 48.27 21.59 49.29 23.76L56 38.1V45.5H13.5Z"
+    fill="white"
+  />
+  <circle cx="46" cy="20" r="9" fill="#0D1F38" fill-opacity="0.18" />
+  <path
+    d="M46 15V25M41 20H51"
+    stroke="white"
+    stroke-width="3.5"
+    stroke-linecap="round"
+  />
+</svg>

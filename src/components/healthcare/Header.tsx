@@ -1,24 +1,36 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HeartPulse, Menu, X, Phone } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { clarityCarePaths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { label: 'Home', href: '#hero' },
-  { label: 'About', href: '#about' },
-  { label: 'Services', href: '#services' },
-  { label: 'Reviews', href: '#reviews' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Home', hash: '#hero' },
+  { label: 'About', hash: '#about' },
+  { label: 'Services', hash: '#services' },
+  { label: 'Reviews', hash: '#reviews' },
+  { label: 'Contact', hash: '#contact' },
 ]
 
 export default function Header() {
+  const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const isBookingPage = location.pathname === clarityCarePaths.bookCall
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname, location.hash])
+
+  const headerCta = isBookingPage
+    ? { label: 'See Services', to: `${clarityCarePaths.home}#services` }
+    : { label: 'Book a Call', to: clarityCarePaths.bookCall }
 
   return (
     <header
@@ -33,7 +45,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 lg:h-20">
 
           {/* Logo */}
-          <a href="#hero" className="flex items-center gap-2.5 group">
+          <Link to={`${clarityCarePaths.home}#hero`} className="flex items-center gap-2.5 group">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center transition-transform duration-150 group-hover:scale-105">
               <HeartPulse size={17} className="text-primary-foreground" />
             </div>
@@ -43,18 +55,18 @@ export default function Header() {
             >
               Clarity Care
             </span>
-          </a>
+          </Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-7">
             {navLinks.map((link) => (
-              <a
+              <Link
                 key={link.label}
-                href={link.href}
+                to={`${clarityCarePaths.home}${link.hash}`}
                 className="text-sm font-medium text-white/65 hover:text-white transition-colors duration-150"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -69,12 +81,12 @@ export default function Header() {
               <span>(800) 555-0199</span>
             </a>
 
-            <a
-              href="#contact"
+            <Link
+              to={headerCta.to}
               className="hidden md:inline-flex items-center gap-1.5 bg-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-xl transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
             >
-              Book a Call
-            </a>
+              {headerCta.label}
+            </Link>
 
             {/* Mobile hamburger */}
             <button
@@ -99,22 +111,22 @@ export default function Header() {
       >
         <nav className="px-4 py-4 flex flex-col gap-1">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.href}
+              to={`${clarityCarePaths.home}${link.hash}`}
               onClick={() => setMenuOpen(false)}
               className="px-3 py-2.5 text-sm font-medium text-white/75 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
-          <a
-            href="#contact"
+          <Link
+            to={headerCta.to}
             onClick={() => setMenuOpen(false)}
             className="mt-3 flex items-center justify-center gap-2 bg-primary text-primary-foreground text-sm font-semibold px-5 py-3 rounded-xl"
           >
-            Book a Call
-          </a>
+            {headerCta.label}
+          </Link>
         </nav>
       </div>
     </header>

@@ -1,33 +1,33 @@
-import Header from '@/components/healthcare/Header'
-import HeroSection from '@/components/healthcare/HeroSection'
-import StatsBar from '@/components/healthcare/StatsBar'
 import AboutSection from '@/components/healthcare/AboutSection'
-import WhyChooseUs from '@/components/healthcare/WhyChooseUs'
-import ServicesSection from '@/components/healthcare/ServicesSection'
 import BenefitsList from '@/components/healthcare/BenefitsList'
-import Testimonials from '@/components/healthcare/Testimonials'
-import TeamSection from '@/components/healthcare/TeamSection'
-import FAQSection from '@/components/healthcare/FAQSection'
+import CareJourneySection from '@/components/healthcare/CareJourneySection'
+import HeroSection from '@/components/healthcare/HeroSection'
 import ContactSection from '@/components/healthcare/ContactSection'
-import Footer from '@/components/healthcare/Footer'
+import FAQSection from '@/components/healthcare/FAQSection'
+import HealthcareShell from '@/components/healthcare/HealthcareShell'
+import ServicesSection from '@/components/healthcare/ServicesSection'
+import StatsBar from '@/components/healthcare/StatsBar'
+import TeamSection from '@/components/healthcare/TeamSection'
+import Testimonials from '@/components/healthcare/Testimonials'
+import WhyChooseUs from '@/components/healthcare/WhyChooseUs'
+import { useHashScroll } from '@/hooks/useHashScroll'
 
 export default function HealthcarePage() {
+  useHashScroll()
+
   return (
-    <div className="healthcare bg-background text-foreground min-h-screen">
-      <Header />
-      <main>
+    <HealthcareShell>
         <HeroSection />
         <StatsBar />
         <AboutSection />
         <WhyChooseUs />
         <ServicesSection />
+        <CareJourneySection />
         <BenefitsList />
         <Testimonials />
         <TeamSection />
         <FAQSection />
         <ContactSection />
-      </main>
-      <Footer />
-    </div>
+    </HealthcareShell>
   )
 }

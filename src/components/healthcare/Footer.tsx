@@ -1,23 +1,54 @@
-import { HeartPulse } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
+import { ArrowRight, HeartPulse } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { careServices } from '@/data/clarityCareBooking'
+import { buildClarityCareBookCallPath, clarityCarePaths } from '@/lib/routes'
 
 const links = [
   {
     heading: 'Services',
-    items: ['Individual Therapy', 'Family Therapy', 'Couples Therapy', 'Physical Therapy'],
+    items: careServices.map((service) => ({
+      label: service.name,
+      to: buildClarityCareBookCallPath({ service: service.id }),
+    })),
   },
   {
     heading: 'Company',
-    items: ['About Us', 'Our Team', 'Careers', 'Press'],
+    items: [
+      { label: 'About Us', to: `${clarityCarePaths.home}#about` },
+      { label: 'Our Team', to: `${clarityCarePaths.home}#team` },
+      { label: 'Client Reviews', to: `${clarityCarePaths.home}#reviews` },
+      { label: 'Book a Call', to: clarityCarePaths.bookCall },
+    ],
   },
   {
     heading: 'Support',
-    items: ['Contact Us', 'Privacy Policy', 'Terms of Service', 'Accessibility'],
+    items: [
+      { label: 'Contact Us', to: `${clarityCarePaths.home}#contact` },
+      { label: 'Call (800) 555-0199', to: 'tel:+18005550199', external: true },
+      { label: 'hello@claritycare.com', to: 'mailto:hello@claritycare.com', external: true },
+      { label: 'Virtual Sessions', to: buildClarityCareBookCallPath({ format: 'virtual' }) },
+    ],
   },
 ]
 
 export default function Footer() {
+  const [email, setEmail] = useState('')
+  const [subscribed, setSubscribed] = useState(false)
+
+  function handleSubscribe(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return
+    }
+
+    setSubscribed(true)
+    setEmail('')
+  }
+
   return (
     <footer style={{ background: 'var(--foreground)', color: 'var(--background)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
@@ -39,17 +70,34 @@ export default function Footer() {
               Your path to wellness starts today. Compassionate, evidence-based
               therapy for individuals, couples, and families.
             </p>
-            {/* Newsletter */}
-            <p className="text-sm font-medium mb-3 opacity-80">Stay in the know</p>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="Your email"
-                className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus-visible:ring-primary"
-              />
-              <Button size="sm" className="shrink-0">
-                Subscribe
-              </Button>
+            <Link
+              to={clarityCarePaths.bookCall}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            >
+              Book a Call
+              <ArrowRight size={14} />
+            </Link>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium mb-3 opacity-80">Care notes by email</p>
+              {!subscribed ? (
+                <form className="flex gap-2" onSubmit={handleSubscribe}>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="Your email"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus-visible:ring-primary"
+                  />
+                  <Button size="sm" className="shrink-0" type="submit">
+                    Subscribe
+                  </Button>
+                </form>
+              ) : (
+                <p className="text-sm leading-6 text-white/72">
+                  You are in. We will send thoughtful updates and appointment availability.
+                </p>
+              )}
             </div>
           </div>
 
@@ -61,13 +109,22 @@ export default function Footer() {
               </h4>
               <ul className="space-y-2.5">
                 {items.map((item) => (
-                  <li key={item}>
-                    <a
-                      href="#"
-                      className="text-sm opacity-60 hover:opacity-100 transition-opacity"
-                    >
-                      {item}
-                    </a>
+                  <li key={item.label}>
+                    {item.external ? (
+                      <a
+                        href={item.to}
+                        className="text-sm opacity-60 hover:opacity-100 transition-opacity"
+                      >
+                        {item.label}
+                      </a>
+                    ) : (
+                      <Link
+                        to={item.to}
+                        className="text-sm opacity-60 hover:opacity-100 transition-opacity"
+                      >
+                        {item.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -82,9 +139,9 @@ export default function Footer() {
         >
           <p>© {new Date().getFullYear()} Clarity Care. All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:opacity-70 transition-opacity">Privacy</a>
-            <a href="#" className="hover:opacity-70 transition-opacity">Terms</a>
-            <a href="#" className="hover:opacity-70 transition-opacity">Cookies</a>
+            <Link to={clarityCarePaths.bookCall} className="hover:opacity-70 transition-opacity">Book a call</Link>
+            <a href="tel:+18005550199" className="hover:opacity-70 transition-opacity">Call</a>
+            <a href="mailto:hello@claritycare.com" className="hover:opacity-70 transition-opacity">Email</a>
           </div>
         </div>
       </div>

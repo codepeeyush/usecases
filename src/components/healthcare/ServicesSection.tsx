@@ -1,40 +1,8 @@
 import { ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { buttonVariants } from '@/components/ui/button'
-
-const services = [
-  {
-    title: 'Individual Therapy',
-    description:
-      'Work through anxiety, depression, trauma, or life transitions one-on-one with a licensed therapist who truly listens.',
-    image:
-      'https://images.unsplash.com/photo-1573497491765-dccce02b29df?auto=format&fit=crop&w=800&q=80',
-    tag: 'Most Popular',
-  },
-  {
-    title: 'Family Therapy',
-    description:
-      'Rebuild trust and communication within your family. Guided sessions that help every member feel heard.',
-    image:
-      'https://images.unsplash.com/photo-1609220136736-443140cffec6?auto=format&fit=crop&w=800&q=80',
-    tag: null,
-  },
-  {
-    title: 'Couples Therapy',
-    description:
-      'Reconnect with your partner through structured sessions focused on empathy, communication, and shared goals.',
-    image:
-      'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=800&q=80',
-    tag: null,
-  },
-  {
-    title: 'Physical Therapy',
-    description:
-      'Evidence-based movement and recovery programs that restore function, reduce pain, and support long-term well-being.',
-    image:
-      'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=800&q=80',
-    tag: null,
-  },
-]
+import { careServices } from '@/data/clarityCareBooking'
+import { buildClarityCareBookCallPath } from '@/lib/routes'
 
 export default function ServicesSection() {
   return (
@@ -59,8 +27,8 @@ export default function ServicesSection() {
               A full spectrum of therapy services — so wherever you are in life,
               there's a path forward with Clarity Care.
             </p>
-            <a
-              href="#contact"
+            <Link
+              to={buildClarityCareBookCallPath()}
               className={buttonVariants({
                 variant: 'outline',
                 className: 'shrink-0 self-start sm:self-auto',
@@ -68,16 +36,16 @@ export default function ServicesSection() {
             >
               Book a Consult
               <ArrowRight size={14} />
-            </a>
+            </Link>
           </div>
         </div>
 
         {/* Service cards — asymmetric grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {services.map(({ title, description, image, tag }, i) => (
-            <a
-              key={title}
-              href="#contact"
+          {careServices.map(({ id, name, description, image, tag }, i) => (
+            <Link
+              key={id}
+              to={buildClarityCareBookCallPath({ service: id })}
               className={`group relative rounded-2xl overflow-hidden block ${
                 i === 0 ? 'sm:row-span-1 lg:row-span-1' : ''
               }`}
@@ -86,7 +54,7 @@ export default function ServicesSection() {
               {/* Photo */}
               <img
                 src={image}
-                alt={title}
+                alt={name}
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               {/* Dark gradient overlay */}
@@ -105,7 +73,7 @@ export default function ServicesSection() {
                   className="text-white font-semibold text-lg mb-1.5 leading-snug"
                   style={{ fontFamily: 'var(--font-display)' }}
                 >
-                  {title}
+                  {name}
                 </h3>
                 <p className="text-white/70 text-xs leading-relaxed mb-4 line-clamp-2">
                   {description}
@@ -114,7 +82,7 @@ export default function ServicesSection() {
                   Learn more <ArrowRight size={11} />
                 </span>
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       </div>

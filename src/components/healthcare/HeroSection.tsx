@@ -1,15 +1,13 @@
 import { useState } from 'react'
 import { ArrowRight, ChevronDown, ShieldCheck, Star } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { careServices, getCareService } from '@/data/clarityCareBooking'
+import { buildClarityCareBookCallPath, clarityCarePaths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
-const therapyTypes = [
-  { id: 'individual', label: 'For Myself', sublabel: 'Individual therapy' },
-  { id: 'couples', label: 'For My Relationship', sublabel: 'Couples therapy' },
-  { id: 'family', label: 'For My Family', sublabel: 'Family therapy' },
-]
-
 export default function HeroSection() {
-  const [selected, setSelected] = useState('individual')
+  const [selected, setSelected] = useState(careServices[0].id)
+  const selectedService = getCareService(selected)
 
   return (
     <section
@@ -74,7 +72,7 @@ export default function HeroSection() {
             What are you looking for?
           </p>
           <div className="flex flex-wrap gap-2.5 mb-8">
-            {therapyTypes.map(({ id, label, sublabel }) => (
+            {careServices.map(({ id, selectorLabel, selectorSublabel }) => (
               <button
                 key={id}
                 onClick={() => setSelected(id)}
@@ -85,14 +83,14 @@ export default function HeroSection() {
                     : 'bg-white/10 backdrop-blur-sm border-white/25 text-white hover:bg-white/20 hover:border-white/40'
                 )}
               >
-                <span className="text-sm font-semibold leading-tight">{label}</span>
+                <span className="text-sm font-semibold leading-tight">{selectorLabel}</span>
                 <span
                   className={cn(
                     'text-xs mt-0.5 leading-tight',
                     selected === id ? 'text-[#0D1F38]/60' : 'text-white/55'
                   )}
                 >
-                  {sublabel}
+                  {selectorSublabel}
                 </span>
               </button>
             ))}
@@ -100,26 +98,29 @@ export default function HeroSection() {
 
           {/* CTA */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <a
-              href="#contact"
+            <Link
+              to={buildClarityCareBookCallPath({ service: selectedService.id })}
               className="inline-flex items-center justify-center gap-2 bg-white text-[#0D1F38] hover:bg-white/92 font-semibold px-8 py-3.5 rounded-xl text-base transition-all duration-150 shadow-lg hover:shadow-xl active:scale-[0.98]"
             >
-              Get Matched Today
+              Book {selectedService.name}
               <ArrowRight size={16} />
-            </a>
-            <a
-              href="#services"
+            </Link>
+            <Link
+              to={`${clarityCarePaths.home}#services`}
               className="flex items-center gap-1.5 text-white/75 hover:text-white transition-colors text-sm font-medium"
             >
               See all services
               <ArrowRight size={14} />
-            </a>
+            </Link>
           </div>
 
           {/* Outcome micro-proof */}
-          <p className="mt-6 text-xs text-white/45">
-            75% of our clients report meaningful improvement within 8 sessions.
-          </p>
+          <div className="mt-6 max-w-lg rounded-2xl border border-white/14 bg-white/8 px-4 py-3 backdrop-blur-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Selected path
+            </p>
+            <p className="mt-1 text-sm text-white/78">{selectedService.heroSummary}</p>
+          </div>
         </div>
       </div>
 

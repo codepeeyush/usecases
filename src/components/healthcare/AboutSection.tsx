@@ -1,5 +1,7 @@
 import { CheckCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { buttonVariants } from '@/components/ui/button'
+import { buildClarityCareBookCallPath } from '@/lib/routes'
 
 const points = [
   'Licensed and certified therapists with 12+ years combined experience',
@@ -55,9 +57,12 @@ export default function AboutSection() {
                 </li>
               ))}
             </ul>
-            <a href="#contact" className={buttonVariants({ size: 'lg' })}>
+            <Link
+              to={buildClarityCareBookCallPath({ service: 'individual' })}
+              className={buttonVariants({ size: 'lg' })}
+            >
               Start Your Journey
-            </a>
+            </Link>
           </div>
         </div>
       </div>
