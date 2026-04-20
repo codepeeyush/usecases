@@ -13,4 +13,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    port: 3000,
+    proxy: {
+      '/script_local.js': {
+        target: 'http://192.168.18.169:4173',
+        changeOrigin: true,
+      }
+    }
+  },
 })
